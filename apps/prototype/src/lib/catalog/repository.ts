@@ -35,8 +35,9 @@ export type CatalogRepository = {
 
 function createRepository(categories: Category[], products: Product[], source: CatalogRepository["source"]): CatalogRepository {
   const tree = buildCategoryTree(categories);
-  const bySlug = new Map(products.map((p) => [p.slug, p]));
-  const byId = new Map(products.map((p) => [p.id, p]));
+  // Ook de ID's en URL's van Shopify-producten die in een ontwerp opgingen (lib/catalog/ontwerpen.ts).
+  const bySlug = new Map(products.flatMap((p) => [p, ...(p.aliases ?? [])].map((a) => [a.slug, p] as const)));
+  const byId = new Map(products.flatMap((p) => [p, ...(p.aliases ?? [])].map((a) => [a.id, p] as const)));
 
   // Producten die naar een onbekende categorie verwijzen zijn een datafout: meteen melden.
   for (const p of products) {

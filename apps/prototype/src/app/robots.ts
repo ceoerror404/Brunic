@@ -5,7 +5,9 @@ import { SITE } from "@/lib/site/config";
 export default function robots(): MetadataRoute.Robots {
   if (process.env.SITE_INDEXEREN !== "1") return { rules: { userAgent: "*", disallow: "/" } };
   return {
-    rules: { userAgent: "*", allow: "/", disallow: ["/api/", "/winkelmand", "/verlanglijst", "/zoeken"] },
+    // ?product= / ?verlanglijst=: het aanvraagformulier voorgevuld vanaf elke productpagina (routes.quote) —
+    // anders kruipt een zoekmachine duizenden kopieën van de contact- en opmetingspagina af.
+    rules: { userAgent: "*", allow: "/", disallow: ["/api/", "/winkelmand", "/verlanglijst", "/zoeken", "/*?product=", "/*?verlanglijst="] },
     sitemap: `${SITE.url}/sitemap.xml`,
     host: SITE.url,
   };

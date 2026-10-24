@@ -5,9 +5,11 @@ import { variantLabel } from "@/lib/catalog/product";
 import { routes } from "@/lib/routes";
 import { SITE } from "@/lib/site/config";
 import { absoluteUrl } from "@/lib/site/seo";
+import { meld } from "@/lib/melding";
 import { geldigEmail, normaliseerTelefoon } from "./consent";
 import { uploadFotos } from "./fotos";
 import { bewaarKlant, koppelFotos, markeerVoorOpvolging, samenvatting, schrijfInVoorNieuwsbrief } from "./klant";
+import { binnenLimiet } from "./limiet";
 import { LEAD_SOORTEN, type FormState, type Lead, type LeadSoort } from "./types";
 
 /**
@@ -25,12 +27,20 @@ function tekst(fd: FormData, key: string, max = 2000): string {
     .slice(0, max);
 }
 
-/** Bots vullen het verborgen veld "website" in of versturen binnen een paar seconden. */
+/**
+ * Bots vullen het verborgen veld "website" in, versturen binnen een paar seconden, of posten
+ * rechtstreeks zonder het formulier te laden (geen geldig tijdstip `_t`). Elk formulier op de
+ * site zet `_t` (lead-form.tsx, newsletter-band.tsx).
+ */
 function isSpam(fd: FormData): boolean {
   if (tekst(fd, "website")) return true;
   const start = Number(tekst(fd, "_t", 20));
-  return Number.isFinite(start) && start > 0 && Date.now() - start < 2500;
+  if (!Number.isFinite(start) || start <= 0) return true;
+  // Te snel (bot); een vervalst tijdstip in de toekomst valt hier ook onder.
+  return Date.now() - start < 2500;
 }
+
+const TE_VEEL = `U verstuurde net al enkele aanvragen. Probeer het over een kwartier opnieuw, of bel ons op ${SITE.phone.display}.`;
 
 /** Productregels server-side opbouwen uit "slug|variantId" — nooit vertrouwen op tekst uit de browser. */
 async function productRegels(fd: FormData): Promise<string[]> {
@@ -92,6 +102,9 @@ export async function verstuurAanvraag(_vorige: FormState, fd: FormData): Promis
   };
   const fotos = fd.getAll("fotos").filter((x): x is File => x instanceof File && x.size > 0);
 
+  // 5 geldige aanvragen per kwartier per IP-adres (zie limiet.ts); een tikfout telt niet mee.
+  if (!(await binnenLimiet("aanvraag", 5, 15 * 60_000))) return { status: "fout", message: TE_VEEL };
+
   if (DRYRUN) {
     console.log(`[aanvraag] DRY-RUN (LEADS_DRYRUN=1) — niets verstuurd.\n${samenvatting(lead)}\nFoto's: ${fotos.length}`);
     return { status: "ok" };
@@ -102,7 +115,7 @@ export async function verstuurAanvraag(_vorige: FormState, fd: FormData): Promis
   try {
     klantId = await bewaarKlant(lead);
   } catch (e) {
-    console.error("[aanvraag] opslaan als Shopify-klant mislukt:", e);
+    meld("aanvraag", "Opslaan als Shopify-klant mislukt — de bezoeker kreeg de vraag om te bellen", { soort, fout: (e as Error).message });
     return { status: "fout", message: FOUT_ALGEMEEN };
   }
 
@@ -110,14 +123,19 @@ export async function verstuurAanvraag(_vorige: FormState, fd: FormData): Promis
   try {
     await koppelFotos(klantId, await uploadFotos(fotos));
   } catch (e) {
-    console.error("[aanvraag] foto-upload mislukt (aanvraag blijft behouden):", e);
+    meld("aanvraag", "Foto-upload mislukt (aanvraag zelf is bewaard)", { klant: klantId, fotos: fotos.length, fout: (e as Error).message });
   }
 
-  // 3) Opvolgvlag → Shopify Flow mailt de winkel.
-  try {
-    await markeerVoorOpvolging(klantId);
-  } catch (e) {
-    console.error("[aanvraag] OPGESLAGEN MAAR OPVOLGVLAG MISLUKT — klant:", klantId, e);
+  // 3) Opvolgvlag → Shopify Flow mailt de winkel. Eén nieuwe poging: zonder vlag mailt niemand.
+  for (let poging = 1; poging <= 2; poging++) {
+    try {
+      await markeerVoorOpvolging(klantId);
+      break;
+    } catch (e) {
+      if (poging === 2) {
+        meld("aanvraag", "Aanvraag bewaard maar de opvolgvlag (Flow-mail) is mislukt — volg deze klant handmatig op", { klant: klantId, soort, fout: (e as Error).message });
+      }
+    }
   }
   return { status: "ok" };
 }
@@ -126,6 +144,7 @@ export async function schrijfIn(_vorige: FormState, fd: FormData): Promise<FormS
   if (isSpam(fd)) return { status: "ok" };
   const email = tekst(fd, "email", 160).toLowerCase();
   if (!geldigEmail(email)) return { status: "fout", velden: { email: "Vul een geldig e-mailadres in." } };
+  if (!(await binnenLimiet("nieuwsbrief", 5, 15 * 60_000))) return { status: "fout", message: "Te veel inschrijvingen na elkaar. Probeer het later opnieuw." };
   if (DRYRUN) {
     console.log(`[nieuwsbrief] DRY-RUN — ${email}`);
     return { status: "ok" };
@@ -134,7 +153,7 @@ export async function schrijfIn(_vorige: FormState, fd: FormData): Promise<FormS
     await schrijfInVoorNieuwsbrief(email, new Date().toISOString());
     return { status: "ok" };
   } catch (e) {
-    console.error("[nieuwsbrief] inschrijven mislukt:", e);
+    meld("nieuwsbrief", "Inschrijven mislukt", { fout: (e as Error).message });
     return { status: "fout", message: "Inschrijven lukte even niet. Probeer het later opnieuw." };
   }
 }

@@ -17,8 +17,6 @@ export const routes = {
   catalog: () => "/catalogus",
   /** Categorie op elke diepte: /catalogus/behang/effen */
   category: (node: Pick<CategoryNode, "path">) => `/catalogus/${node.path.map(encodeURIComponent).join("/")}`,
-  /** Alle producten van een (hoofd)categorie als lijst, i.p.v. de landingspagina. */
-  categoryProducts: (node: Pick<CategoryNode, "path">) => `/catalogus/${node.path.map(encodeURIComponent).join("/")}?weergave=producten`,
   product: (slug: string, variantId?: string) =>
     variantId ? `/product/${encodeURIComponent(slug)}?variant=${encodeURIComponent(variantId)}` : `/product/${encodeURIComponent(slug)}`,
   search: (q?: string) => (q ? `/zoeken?q=${encodeURIComponent(q)}` : "/zoeken"),

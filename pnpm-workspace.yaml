@@ -7,3 +7,7 @@ packages:
 # `next start` en toekomstige lokale optimalisatie werkend.
 allowBuilds:
   sharp: true
+  # unrs-resolver (via eslint-config-next) heeft een installscript dat enkel een fallback-
+  # binary bouwt; de prebuilt binary volstaat. Expliciet weigeren: geen vreemde installcode,
+  # en pnpm stopt dan niet met ERR_PNPM_IGNORED_BUILDS (lokaal, bij Jeroen en op Vercel).
+  unrs-resolver: false

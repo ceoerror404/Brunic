@@ -45,3 +45,11 @@ export const SHOPIFY_NIEUW_COLLECTIE = "nieuw-binnen";
 /** Technische collecties die geen categorie zijn. */
 export const SHOPIFY_NEGEER = new Set(["frontpage", "in-de-kijker", SHOPIFY_NIEUW_COLLECTIE]);
 
+/**
+ * Zelfde merk en naam, toch verschillende ontwerpen: niet samenvoegen tot één product
+ * (lib/catalog/ontwerpen.ts). Ze blijven apart, met de collectie achter de naam.
+ */
+export const ZELFDE_NAAM_ANDER_ONTWERP: { merk: string; titel: string }[] = [
+  { merk: "Desso", titel: "Fuse B755" }, // collecties Fuse Landscape en Fuse Create
+];
+

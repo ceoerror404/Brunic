@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState, type ReactNode } from "react";
-import { useCart, useWishlist } from "@/lib/store/stores";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { lopendeKassa, useCart, useWishlist } from "@/lib/store/stores";
 import { useProducts } from "@/lib/store/use-products";
 import { routes } from "@/lib/routes";
 import { SITE } from "@/lib/site/config";
@@ -21,21 +21,35 @@ import { RecentlyViewed } from "./recently-viewed";
 export function CartView({ departments }: { departments: ReactNode }) {
   const cart = useCart();
   const wish = useWishlist();
-  const { map, loading } = useProducts(cart.lines.map((l) => l.productId));
+  // Beschikbaarheid live uit Shopify: een intussen uitverkochte uitvoering ziet de klant hier al.
+  const { map, loading } = useProducts(
+    cart.lines.map((l) => l.productId),
+    { live: true },
+  );
   const [bezig, setBezig] = useState(false);
   const [kassaFout, setKassaFout] = useState("");
+
+  // Met "terug" uit de Shopify-kassa (bfcache) stond de knop nog op "Even geduld…".
+  useEffect(() => {
+    const terug = (e: PageTransitionEvent) => e.persisted && setBezig(false);
+    window.addEventListener("pageshow", terug);
+    return () => window.removeEventListener("pageshow", terug);
+  }, []);
 
   const afrekenen = async () => {
     setBezig(true);
     setKassaFout("");
     try {
+      const lines = cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity }));
       const res = await fetch("/api/kassa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) }),
+        body: JSON.stringify({ lines }),
       });
-      const data = (await res.json()) as { checkoutUrl?: string; error?: string };
+      const data = (await res.json()) as { checkoutUrl?: string; cartId?: string; error?: string };
       if (data.checkoutUrl) {
+        // Onthouden welke cart naar de kassa ging: na betaling verdwijnen die regels (kassa-opvolging.tsx).
+        if (data.cartId) lopendeKassa.start(data.cartId, lines);
         window.location.href = data.checkoutUrl;
         return;
       }

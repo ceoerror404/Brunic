@@ -10,7 +10,7 @@
 
 ## Voorgestelde repo-structuur (mini-monorepo)
 ```
-apps/web          # Next.js storefront
+apps/prototype    # Next.js storefront (de enige front; apps/web verwijderd op 20/10/2026)
 services/chatbot  # chatbot-service (later; spec eerst)
 packages/catalog  # trechter → verrijking → Shopify-import (Python/Node)
 docs/             # design-brief, architectuur, ADR's
@@ -37,7 +37,7 @@ data/             # ruwe exports — GITIGNORED, device-local
 1. **Maat = eigen route** (`/[collection]/maat/[bucket]`) — statisch, indexeerbaar, deelbaar, werkt zonder JS. Buckets (`tot 120 · 120–170 · 170–240 · 240+`) vertalen naar een OR-lijst van discrete `breedte_cm`-waarden (Storefront kent geen numerieke ranges). Zie §Datamodel.
 2. **Generieke facets = query-string** (`?kleur=Beige&materiaal=Wol`) — kleur, materiaal, poolklasse… Meerdere waarden binnen één facet = OR, verschillende facets = AND (native S&D-gedrag). Gefilterde combinaties zijn **`noindex` + canonical → het kale pad** (geen facet-explosie in de index). Maat + facets composeren: de facet-querystring blijft behouden bij het wisselen van maat-bucket.
 
-**Implementatie:** `apps/web/src/lib/shopify/facets.ts` (`FACET_DEFS`) + `components/facet-filters.tsx`. **Een filter toevoegen = één regel in `FACET_DEFS` + het filter aanzetten in de Search & Discovery-app** (dat publiceert `filter.p.m.brunic.<key>`). Facets zijn exact-match op metafield-waarden; numerieke assen (rolbreedte) krijgen dezelfde bucket-behandeling als maat. Alleen prijs heeft een native range-filter.
+**Implementatie (sinds 20/10/2026 enkel `apps/prototype`):** `src/lib/catalog/filters.ts` (`FACETS`) + `components/catalog/product-listing.tsx`; de filters rekenen op de catalogus-momentopname (waarden uit de metafields via `shopify-adapter.ts`), niet op Search & Discovery. Routes: `/catalogus/<hoofd>/<sub>` met filters in de querystring. *(De maat-route `/[collection]/maat/[bucket]` hierboven was de implementatie van het verwijderde `apps/web`.)* Facets zijn exact-match op metafield-waarden; numerieke assen (rolbreedte) krijgen dezelfde bucket-behandeling als maat. Alleen prijs heeft een native range-filter.
 
 **Voorgestelde facet-taxonomie per webcategorie** (Kleur + Prijs + Beschikbaarheid overal; later Merk zodra de leverancierslijst er is):
 
@@ -83,7 +83,9 @@ data/             # ruwe exports — GITIGNORED, device-local
 - **Pas dán** de **BreadcrumbList + Product/Offer-JSON-LD** op de PDP bouwen, zodat ze het volledige (diepere) pad weerspiegelen — daarom nu bewust nog niet gebouwd. Offer enkel op koopbare, niet-etalage items.
 - ✅ **Klant-input ontvangen én gebouwd 02/08:** hoofdnav hernoemd naar **Gordijnen & stoffen · Behang · Vloerbekleding · Tapijten** (Shopify-handles `vloerbekleding`, `tapijten`); 29 subcollecties aangemaakt en gepubliceerd op Brunic Headless, handle-conventie **`<hoofdprefix>-<sub>`** (`stoffen-effen`, `tapijten-modern`…). Click-vinyl-looks (parket/uniform/tegel) = facet `look`, geen derde routeniveau. De **familie→sub-mapping per artikel** vergt nog verrijkte attributen (Lane C, doc 17 §8).
 
-**Implementatie in de front (02/08).** `apps/web/src/lib/shopify/taxonomie.ts` is de **enige bron** van de boom — Shopify kent géén hiërarchie tussen collecties, en het handle-voorvoegsel is een conventie, geen relatie (`gordijnen-stoffen` › `stoffen-effen` breekt ze al). Routes, kruimelpaden, de chips op de PLP en het dropdownmenu lezen alle vier uit die tabel; een subcategorie toevoegen = één regel daar + de collectie in Shopify.
+**Implementatie in de front — nu (`apps/prototype`, de enige front sinds 20/10/2026):** de boom volgt uit `src/data/shopify-bron.ts` — hoofdcategorieën vast in `src/data/categories.ts`, subcategorieën via het handle-voorvoegsel (`SHOPIFY_SUB_VOORVOEGSEL`, uitzonderingen in `SHOPIFY_SUB_EXTRA`), URL `/catalogus/<hoofd>/<sub>`; een lege collectie verschijnt nergens. Een subcategorie toevoegen = enkel de collectie in Shopify.
+
+*Historisch (02/08, het verwijderde `apps/web`; de punten hieronder beschrijven die implementatie):* `apps/web/src/lib/shopify/taxonomie.ts` was de **enige bron** van de boom — Shopify kent géén hiërarchie tussen collecties, en het handle-voorvoegsel is een conventie, geen relatie (`gordijnen-stoffen` › `stoffen-effen` breekt ze al). Routes, kruimelpaden, de chips op de PLP en het dropdownmenu lezen alle vier uit die tabel; een subcategorie toevoegen = één regel daar + de collectie in Shopify.
 - **Eén URL per subcategorie, afgedwongen in code.** De route is `/[collection]/[subcollection]` (`/behang/effen`); de kale handle `/behang-effen` en `/stoffen-effen` geven **404** — anders zou `/[collection]` elke subcollectie een tweede, indexeerbare URL geven (duplicate content). `dynamicParams = false` op de subroute: onbekende slugs 404'en meteen.
 - ✅ **`logotapijt` (twee ouders) → canonieke URL = `/tapijten/logotapijt`.** `/vloerbekleding/logotapijt` bestaat niet (404); Vloerbekleding toont de chip en linkt naar de canonieke URL. Zo blijft "één subcategorie = één URL" waar, ook bij gedeelde subs.
 - **`maat` blijft gereserveerd**: `/tapijten/maat/120-170` werkt, `/tapijten/maat` is geen subcategorie (404). Subcategorie-slugs mogen dus nooit `maat` heten (`op-maat` mag wel).

@@ -4,11 +4,13 @@ import { Suspense } from "react";
 import { catalog } from "@/lib/catalog/repository";
 import { allPaths, resolveDisplay, visibleChildren } from "@/lib/catalog/tree";
 import { categoryImage, sfeerfotos } from "@/lib/catalog/imagery";
-import { toListingItem } from "@/lib/catalog/view";
+import { categorieInhoud } from "@/lib/inhoud/categorie";
+import { toListingItem, VORM_VAN_CATEGORIE } from "@/lib/catalog/view";
 import { buildListing } from "@/lib/catalog/listing";
 import type { CategoryNode } from "@/lib/catalog/types";
 import { routes } from "@/lib/routes";
-import { breadcrumbJsonLd, categoryCrumbs } from "@/lib/site/seo";
+import { normalize } from "@/lib/catalog/search";
+import { breadcrumbJsonLd, categoryCrumbs, metaDescription } from "@/lib/site/seo";
 import { isOpMaat, maatwerkVoor } from "@/lib/site/maatwerk";
 import { ARTICLES } from "@/data/content";
 import { BEELD } from "@/data/beelden";
@@ -32,12 +34,16 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!node) return { title: "Categorie niet gevonden" };
   const trail = await catalog.getCategoryTrail(node.id);
   const image = await categoryImage(node);
+  const { intro } = await categorieInhoud(node);
   // Gefilterde of "alle producten"-weergaven: noindex + canonical naar het kale pad
   // (geen facet-explosie in de index, architectuur.md §Filters).
   const gefilterd = Object.keys(await searchParams).length > 0;
+  // "Effen behang", niet "Effen behang · Behang": de ouder enkel noemen als de naam hem nog niet zegt.
+  const ouder = trail.at(-2);
+  const zegtOuder = ouder && normalize(ouder.name).split(/\W+/).some((w) => w.length >= 4 && normalize(node.name).includes(w));
   return {
-    title: trail.map((t) => t.name).reverse().join(" · "),
-    description: node.intro?.slice(0, 160),
+    title: zegtOuder ? node.name : trail.map((t) => t.name).reverse().join(" · "),
+    description: metaDescription(intro),
     alternates: { canonical: routes.category(node) },
     openGraph: image ? { images: [{ url: image.src, alt: image.alt }] } : undefined,
     ...(gefilterd ? { robots: { index: false, follow: true } } : {}),
@@ -76,6 +82,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const parent = node.parentId ? tree.byId.get(node.parentId) : undefined;
   const siblings = parent ? visibleChildren(parent) : [];
   const inCategory = await catalog.getProductsInCategory(node.id);
+  // Ondertitel en intro: Shopify-admin ("Categorie | Tekst en foto"), anders de standaardtekst.
+  const { subtitle, intro } = await categorieInhoud(node);
   const crumbs = [{ label: "Catalogus", href: routes.catalog() }, ...trail.map((t) => ({ label: t.name, href: routes.category(t) }))];
   const jsonLd = <JsonLd data={breadcrumbJsonLd(categoryCrumbs(trail))} />;
   const artikels = ARTICLES.filter((a) => a.relatedCategoryId === node.id || a.relatedCategoryId === trail[0].id);
@@ -102,13 +110,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         <CategoryLanding
           crumbs={crumbs}
           title={node.name}
-          subtitle={node.subtitle}
-          intro={node.intro}
+          subtitle={subtitle}
+          intro={intro}
           image={banner}
           subCards={subCards}
           listing={
             <Suspense>
-              <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp)} promo={promo} />
+              <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp, {}, VORM_VAN_CATEGORIE[node.id])} promo={promo} />
             </Suspense>
           }
           total={inCategory.length}
@@ -138,7 +146,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     <div className="shell-inset">
       {jsonLd}
       <Breadcrumbs items={listCrumbs} />
-      <CategoryHeader title={weergave === "producten" ? `Alle producten: ${node.name}` : node.name} intro={node.intro} />
+      <CategoryHeader title={weergave === "producten" ? `Alle producten: ${node.name}` : node.name} intro={intro} />
 
       {(display === "mixed" || display === "overview") && children.length > 0 && (
         <section aria-label={`Onderverdeling van ${node.name}`} className="mt-6">
@@ -154,7 +162,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       <section aria-label={`Producten in ${node.name}`} className="mt-6">
         <Suspense>
-          <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp)} promo={promo} />
+          <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp, {}, VORM_VAN_CATEGORIE[node.id])} promo={promo} />
         </Suspense>
       </section>
     </div>

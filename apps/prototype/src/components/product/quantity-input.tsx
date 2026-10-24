@@ -84,7 +84,10 @@ export function QuantityInput({
     const options: number[] = [];
     for (let q = rule.min; q <= max; q += rule.step) options.push(q);
     // De huidige waarde moet altijd zichtbaar zijn, ook als ze buiten de lijst valt.
-    if (!options.includes(value)) options.push(value), options.sort((a, b) => a - b);
+    if (!options.includes(value)) {
+      options.push(value);
+      options.sort((a, b) => a - b);
+    }
     return (
       <div className="relative shrink-0">
         <label htmlFor={id} className="sr-only">

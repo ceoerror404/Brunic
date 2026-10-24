@@ -35,6 +35,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...SERVICES.map((s) => ({ url: absoluteUrl(routes.service(s.slug)), changeFrequency: "monthly" as const, priority: 0.7 })),
     ...ARTICLES.map((a) => ({ url: absoluteUrl(routes.article(a.slug)), lastModified: a.date, changeFrequency: "yearly" as const, priority: 0.5 })),
     ...INFO_PAGES.map((i) => ({ url: absoluteUrl(routes.info(i.slug)), changeFrequency: "yearly" as const, priority: 0.2 })),
-    ...products.filter(isIndexable).map((p) => ({ url: absoluteUrl(routes.product(p.slug)), changeFrequency: "weekly" as const, priority: 0.6 })),
+    ...products.filter(isIndexable).map((p) => ({ url: absoluteUrl(routes.product(p.slug)), lastModified: p.updatedAt, changeFrequency: "weekly" as const, priority: 0.6 })),
   ];
 }

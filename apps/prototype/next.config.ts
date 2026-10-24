@@ -58,12 +58,57 @@ const nextConfig: NextConfig = {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
   async redirects() {
+    // Gewone pagina's van de oude WooCommerce-site (brunic.be, page-sitemap 20/10/2026).
+    // Producten en categorieën: src/lib/site/oude-urls.ts.
+    const raamdecoratie = [
+      "raamdecoratie",
+      "plisse-gordijnen",
+      "dubbele-plissegordijnen",
+      "velux-zonnewering",
+      "shutters",
+      "paneelgordijnen",
+      "geweven-hout",
+      "verticale-jaloezieen",
+      "horizontale-houten-jaloezieen",
+      "horizontale-aluminium-jaloezieen",
+      "duorolgordijnen",
+      "rolgordijnen",
+      "vouwgordijnen",
+      "smart-blinds",
+      "sheerlight",
+    ];
+    const oudeSite: [string, string][] = [
+      ["/webshop", "/catalogus"],
+      ["/shop", "/catalogus"],
+      ["/product-tag/:pad*", "/catalogus"],
+      ["/contact", "/winkel-en-contact"],
+      ["/vacatures", "/info/over-ons"],
+      ["/sfeerbeelden", "/inspiratie-en-advies"],
+      ["/gift-card", "/winkel-en-contact"],
+      ["/gift-card-balance", "/winkel-en-contact"],
+      ["/stockverkoop", "/aanbiedingen"],
+      ["/zomersolden", "/aanbiedingen"],
+      ["/tapijten-op-maat", "/op-maat-en-plaatsing/tapijt-op-maat"],
+      ["/gordijnen-en-overgordijnen", "/op-maat-en-plaatsing/gordijnen-op-maat"],
+      ["/algemene-voorwaarden", "/info/algemene-voorwaarden"],
+      ["/privacybeleid", "/info/privacy"],
+      ["/privacy-policy", "/info/privacy"],
+      ["/cookiebeleid", "/info/cookies"],
+      ["/winkelwagen", "/winkelmand"],
+      ["/afrekenen", "/winkelmand"],
+      ["/mijn-account/:pad*", "/verlanglijst"],
+      ["/approval-rejection", "/"],
+      ...raamdecoratie.map((p): [string, string] => [`/${p}`, "/op-maat-en-plaatsing/raamdecoratie-op-maat"]),
+    ];
     return [
       // Geen klantaccounts: offertes en de verlanglijst werken zonder login.
       { source: "/account", destination: "/verlanglijst", permanent: true },
       { source: "/info/over-dit-prototype", destination: "/info/over-ons", permanent: true },
       // Desso is een merk van Tarkett en heeft geen eigen merkpagina (src/data/merken.ts → MERK_ONDER).
       { source: "/merken/desso", destination: "/merken/tarkett", permanent: true },
+      ...oudeSite.map(([source, destination]) => ({ source, destination, permanent: true })),
+      // Zoeken op de oude site: /?s=behang → /zoeken?q=behang
+      { source: "/", has: [{ type: "query" as const, key: "s", value: "(?<zoek>.+)" }], destination: "/zoeken?q=:zoek", permanent: true },
     ];
   },
 };

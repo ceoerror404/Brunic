@@ -54,6 +54,48 @@ export function useCart() {
   return { lines, hydrated, add, setQuantity, remove, clear, count: lines.length };
 }
 
+/* ---------------- Lopende kassa ---------------- */
+
+/**
+ * De Shopify-cart waarmee de klant naar de kassa ging, met de regels van dat moment. Is die
+ * cart afgerekend, dan halen we precies die regels uit de lokale winkelmand
+ * (components/commerce/kassa-opvolging.tsx) — zo staat een betaalde bestelling niet opnieuw
+ * in de winkelmand. Regels die de klant daarna nog toevoegde, blijven staan.
+ */
+export type LopendeKassa = { cartId: string; at: number; lines: { variantId: string; quantity: number }[] };
+
+/** Shopify laat een niet-afgerekende cart na ±10 dagen vervallen; daarna weten we niets meer. */
+export const KASSA_GELDIG_MS = 9 * 24 * 3600 * 1000;
+
+const kassaStore = createLocalStore<LopendeKassa | null>("brunic:kassa:v1", null, (raw) =>
+  isObj(raw) && typeof raw.cartId === "string" && typeof raw.at === "number" && Array.isArray(raw.lines)
+    ? {
+        cartId: raw.cartId,
+        at: raw.at,
+        lines: raw.lines.filter((l): l is { variantId: string; quantity: number } => isObj(l) && typeof l.variantId === "string" && typeof l.quantity === "number"),
+      }
+    : null,
+);
+
+export const lopendeKassa = {
+  get: () => kassaStore.get(),
+  start: (cartId: string, lines: LopendeKassa["lines"]) => kassaStore.set({ cartId, at: Date.now(), lines }),
+  stop: () => kassaStore.set(null),
+  /** Cart afgerekend: de afgerekende hoeveelheden uit de winkelmand halen. */
+  afgerond: (k: LopendeKassa) => {
+    const betaald = new Map(k.lines.map((l) => [l.variantId, l.quantity]));
+    cartStore.set((prev) =>
+      prev.flatMap((l) => {
+        const q = betaald.get(l.variantId);
+        if (q === undefined) return [l];
+        const rest = round2(l.quantity - q);
+        return rest > 0 ? [{ ...l, quantity: rest }] : [];
+      }),
+    );
+    kassaStore.set(null);
+  },
+};
+
 /* ---------------- Verlanglijst ---------------- */
 
 export const MAX_WISHLIST = 50;

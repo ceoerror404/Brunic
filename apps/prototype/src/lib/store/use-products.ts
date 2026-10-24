@@ -11,15 +11,24 @@ export type LiteProduct = {
   quantity: QuantityRule;
   pricing: "fixed" | "on-request";
   variants: LiteVariant[];
+  /** Shopify-producten die in dit ontwerp opgingen: oude ID's/slugs uit winkelmand of verlanglijst. */
+  aliases?: { id: string; slug: string }[];
 };
 
-/** Cache per sleutelsoort (id of slug), gedeeld over alle componenten. */
-const caches = { ids: new Map<string, LiteProduct>(), slugs: new Map<string, LiteProduct>() };
+type Soort = "ids" | "slugs";
+const nieuw = () => ({ ids: new Map<string, LiteProduct>(), slugs: new Map<string, LiteProduct>() });
+/**
+ * Cache per sleutelsoort (id of slug), gedeeld over alle componenten. Twee varianten:
+ * `live` (beschikbaarheid live uit Shopify — winkelmand en productpagina) en de gewone
+ * momentopname (verlanglijst, recent bekeken, offerteformulier).
+ */
+const caches = { live: nieuw(), snapshot: nieuw() };
 /** Sleutels die de catalogus niet (meer) kent — bv. een product dat verdween. */
 const gone = { ids: new Set<string>(), slugs: new Set<string>() };
 
-function useLookup(kind: "ids" | "slugs", keys: string[]) {
-  const cache = caches[kind];
+function useLookup(kind: Soort, keys: string[], live = false) {
+  const bron = live ? caches.live : caches.snapshot;
+  const cache = bron[kind];
   const weg = gone[kind];
   const key = [...new Set(keys)].sort().join(",");
   const [, force] = useState(0);
@@ -30,12 +39,14 @@ function useLookup(kind: "ids" | "slugs", keys: string[]) {
     if (missing.length === 0) return;
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/producten?${kind}=${encodeURIComponent(missing.join(","))}`)
+    fetch(`/api/producten?${kind}=${encodeURIComponent(missing.join(","))}${live ? "&live=1" : ""}`)
       .then((r) => r.json())
       .then((data: { products: LiteProduct[] }) => {
         for (const p of data.products) {
-          caches.ids.set(p.card.id, p);
-          caches.slugs.set(p.card.slug, p);
+          for (const a of [p.card, ...(p.aliases ?? [])]) {
+            bron.ids.set(a.id, p);
+            bron.slugs.set(a.slug, p);
+          }
         }
         for (const k of missing) if (!cache.has(k)) weg.add(k);
         if (!cancelled) force((n) => n + 1);
@@ -45,7 +56,7 @@ function useLookup(kind: "ids" | "slugs", keys: string[]) {
     return () => {
       cancelled = true;
     };
-  }, [key, kind, cache, weg]);
+  }, [key, kind, live, bron, cache, weg]);
 
   const map = new Map<string, LiteProduct>();
   for (const k of keys) {
@@ -56,9 +67,12 @@ function useLookup(kind: "ids" | "slugs", keys: string[]) {
   return { map, loading: loading || !complete };
 }
 
-/** Haalt productgegevens op voor een lijst product-ID's (met eenvoudige cache). */
-export function useProducts(ids: string[]) {
-  return useLookup("ids", ids);
+/**
+ * Haalt productgegevens op voor een lijst product-ID's (met eenvoudige cache).
+ * `live`: beschikbaarheid per variant live uit Shopify i.p.v. uit de momentopname.
+ */
+export function useProducts(ids: string[], opts: { live?: boolean } = {}) {
+  return useLookup("ids", ids, opts.live);
 }
 
 /** Idem, op slug (bv. ?product=… in de URL van het offerteformulier). */

@@ -25,6 +25,8 @@ export const MERK_LOGO: Record<string, { src: string; wit?: boolean }> = {
   "louis-de-poortere": { src: "/merken/louis-de-poortere.svg" },
   balsan: { src: "/merken/balsan.svg" },
   tarkett: { src: "/merken/tarkett.svg" },
+  lalee: { src: "/merken/lalee.svg" },
+  ragolle: { src: "/merken/ragolle.svg" },
 };
 
 /**

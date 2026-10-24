@@ -19,6 +19,8 @@ export const FACETS: FacetDef[] = [
   { key: "categorie", label: "Categorie", kind: "list" },
   { key: "type", label: "Type", kind: "list" },
   { key: "kleur", label: "Kleur", kind: "swatch" },
+  { key: "motief", label: "Motief", kind: "list" },
+  { key: "stijl", label: "Stijl", kind: "list" },
   { key: "prijs", label: "Prijs", kind: "price" },
   { key: "materiaal", label: "Materiaal", kind: "list" },
   { key: "lichtdoorlatendheid", label: "Lichtdoorlatendheid", kind: "list" },
@@ -42,7 +44,34 @@ export const SWATCH_COLORS: Record<string, string> = {
   Naturel: "#cbb796", Zwart: "#1d1b1a", Brons: "#8a6a42", Taupe: "#8b7d6b", Zilver: "#c3c3c1", Groen: "#55703d",
   Bruin: "#6c4a2f", Ivoor: "#f2ead4", Oranje: "#d8782c", Bordeaux: "#6c1f2d", Rood: "#b3232b", Roze: "#e5b3bf",
   Meerkleurig: "conic-gradient(#d8782c, #3f5b7d, #55703d, #e5b3bf, #d8782c)",
+  // De kleurfamilies zoals ze in Shopify heten (keuzelijst van brunic.kleurfamilie).
+  Multicolor: "conic-gradient(#d8782c, #3f5b7d, #55703d, #e5b3bf, #d8782c)",
+  Turquoise: "#2f9c9a", Geel: "#e3b52b", Paars: "#6b4f8a",
+  "Goud/metallic": "linear-gradient(135deg, #8a6a2c, #e9cf7a, #8a6a2c)",
+  "Zilver/metallic": "linear-gradient(135deg, #8e8e8c, #e4e4e2, #8e8e8c)",
 };
+
+/** Effen tint voor families die zelf een verloop zijn, als ze maar een deel van een bolletje vullen. */
+const EFFEN_DEEL: Record<string, string> = { "Goud/metallic": "#c2a04e", "Zilver/metallic": "#c3c3c1" };
+
+/**
+ * Kleurbolletje van een variant: hoofdkleur eerst, dan de accentkleuren. Eén kleur = die kleur;
+ * meer kleuren = een verdeeld bolletje (hoofdkleur de linkerhelft, de accenten delen de rechterhelft).
+ * Onbekende kleuren tellen niet mee; geen enkele bekende → undefined.
+ */
+export function kleurStaal(kleuren: string[]): string | undefined {
+  const bekend = [...new Set(kleuren)].filter((k) => SWATCH_COLORS[k]);
+  if (bekend.length === 0) return undefined;
+  // Multicolor is al meerkleurig: accenten erbij maken het niet duidelijker.
+  if (bekend.length === 1 || bekend[0] === "Multicolor" || bekend[0] === "Meerkleurig") return SWATCH_COLORS[bekend[0]];
+  const delen = bekend.map((k) => EFFEN_DEEL[k] ?? SWATCH_COLORS[k]).filter((c) => c.startsWith("#"));
+  if (delen.length === 1) return delen[0];
+  const [hoofd, ...accenten] = delen;
+  const stap = 50 / accenten.length;
+  const stops = [`${hoofd} 0 50%`, ...accenten.map((c, i) => `${c} ${50 + i * stap}% ${50 + (i + 1) * stap}%`)];
+  // Vanaf 6 uur met de klok mee: de eerste helft is de linkerhelft.
+  return `conic-gradient(from 180deg, ${stops.join(", ")})`;
+}
 
 /** Alle filterwaarden van een product, inclusief de afgeleide (prijs, beschikbaarheid). */
 export function derivedFacetValues(p: Product): Record<string, string[]> {

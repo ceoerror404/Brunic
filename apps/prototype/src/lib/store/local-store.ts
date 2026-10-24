@@ -3,8 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Minimale store bovenop localStorage (patroon overgenomen van de favorieten-store in
- * apps/web): synchroniseert tussen componenten via listeners en tussen tabbladen via
+ * Minimale store bovenop localStorage: synchroniseert tussen componenten via listeners en tussen tabbladen via
  * het native `storage`-event. Lezen/schrijven faalt stil (privémodus, volle quota):
  * dan blijft de staat enkel in het geheugen.
  *

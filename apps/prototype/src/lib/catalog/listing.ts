@@ -31,11 +31,27 @@ export function toUrlParams(sp: SearchParamsRecord): URLSearchParams {
   return out;
 }
 
-export function buildListing(all: ListingItem[], searchParams: SearchParamsRecord, labels: FacetLabelMap = {}): ListingData {
+/**
+ * Kaart in de gevraagde vorm (ronde tapijten → de ronde foto) en zonder de vorm-foto's, die
+ * niet naar de browser hoeven.
+ */
+function inVorm({ vormen, ...item }: ListingItem, vorm: string | undefined): ListingItem {
+  const v = vorm ? vormen?.[vorm] : undefined;
+  if (!v) return item;
+  return {
+    ...item,
+    image: v.image ?? item.image,
+    swatches: item.swatches.map((s) => (v.perKleur[s.value] ? { ...s, image: v.perKleur[s.value] } : s)),
+  };
+}
+
+/** `vorm`: de lijst gaat over één vorm (categorie Rond, Speciale vormen). Anders telt een vormfilter met één waarde. */
+export function buildListing(all: ListingItem[], searchParams: SearchParamsRecord, labels: FacetLabelMap = {}, vorm?: string): ListingData {
   const state = parseListState(toUrlParams(searchParams));
   const filtered = sortItems(applyFilters(all, state.selection, state.offersOnly), state.sort);
+  const gekozenVorm = vorm ?? (state.selection.vorm?.length === 1 ? state.selection.vorm[0] : undefined);
   return {
-    items: filtered.slice(0, state.page * PAGE_SIZE),
+    items: filtered.slice(0, state.page * PAGE_SIZE).map((i) => inVorm(i, gekozenVorm)),
     total: filtered.length,
     groups: facetGroups(all, state.selection, state.offersOnly, labels),
     state,

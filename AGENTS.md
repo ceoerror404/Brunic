@@ -20,7 +20,7 @@ Dit is de **werkplaats** voor het Brunic-webshopproject (klant van HackersQuattr
 ## Git & deploy (sinds 04/10/2026)
 - **Iedereen werkt op `master`** (Jeroen én Alexander) — geen aparte persoonlijke branches meer. Altijd eerst `git pull --rebase`, dan pushen.
 - Elke push naar `master` = **productie op https://brunic.vercel.app** (Vercel-project `brunic`, root `apps/prototype`). Andere branches krijgen enkel een preview-URL.
-- `apps/web` wordt niet meer gedeployed. Het Vercel-project `brunic-prototype` is overbodig (builds staan uit).
+- `apps/web` (de oude storefront) is verwijderd op 20/10/2026; `apps/prototype` is de enige front. Het Vercel-project `brunic-prototype` is overbodig (builds staan uit).
 
 ## Gedeeld werkcontract — Claude en Codex
 

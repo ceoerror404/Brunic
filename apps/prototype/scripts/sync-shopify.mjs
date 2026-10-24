@@ -70,15 +70,18 @@ const PRODUCTS = /* GraphQL */ `
       nodes {
         id handle title vendor productType createdAt updatedAt descriptionHtml
         options { name optionValues { name swatch { color image { previewImage { url } } } } }
-        images(first: 24) { nodes { ${IMG} } }
-        collections(first: 25) { nodes { handle } }
+        images(first: 100) { pageInfo { hasNextPage } nodes { ${IMG} } }
+        collections(first: 25) { pageInfo { hasNextPage } nodes { handle } }
         etalage: metafield(namespace: "brunic", key: "etalage") { value }
         eenheid: metafield(namespace: "brunic", key: "verkoop_eenheid") { value }
         kleurfamilie: metafield(namespace: "brunic", key: "kleurfamilie") { value }
         materiaal: metafield(namespace: "brunic", key: "materiaal") { value }
         collectie: metafield(namespace: "brunic", key: "collectie") { value }
         specificaties: metafield(namespace: "brunic", key: "specificaties") { value }
+        motief: metafield(namespace: "brunic", key: "motief") { value }
+        stijl: metafield(namespace: "brunic", key: "stijl") { value }
         variants(first: 250) {
+          pageInfo { hasNextPage }
           nodes {
             id sku availableForSale
             price { amount } compareAtPrice { amount }
@@ -86,6 +89,8 @@ const PRODUCTS = /* GraphQL */ `
             image { url }
             breedte: metafield(namespace: "brunic", key: "breedte_cm") { value }
             lengte: metafield(namespace: "brunic", key: "lengte_cm") { value }
+            kleurfamilie: metafield(namespace: "brunic", key: "kleurfamilie") { value }
+            accentkleuren: metafield(namespace: "brunic", key: "accentkleuren") { value }
           }
         }
       }
@@ -125,6 +130,13 @@ do {
 } while (after);
 process.stdout.write("\n");
 
+// Afgekapte lijsten melden (Storefront geeft per product max. zoveel terug als gevraagd).
+const afgekapt = (soort) => products.filter((p) => p[soort].pageInfo?.hasNextPage).map((p) => p.handle);
+for (const [soort, max] of [["images", 100], ["collections", 25], ["variants", 250]]) {
+  const lijst = afgekapt(soort);
+  if (lijst.length) console.warn(`⚠️  ${lijst.length} producten hebben meer dan ${max} ${soort} — enkel de eerste ${max} staan op de site: ${lijst.slice(0, 5).join(", ")}${lijst.length > 5 ? " …" : ""}`);
+}
+
 // Metafield-afkortingen platslaan ({ value } → string | null) houdt het bestand compact.
 const flat = (m) => (m && typeof m.value === "string" ? m.value : null);
 const compact = products.map((p) => ({
@@ -135,9 +147,18 @@ const compact = products.map((p) => ({
   materiaal: flat(p.materiaal),
   collectie: flat(p.collectie),
   specificaties: flat(p.specificaties),
+  motief: flat(p.motief),
+  stijl: flat(p.stijl),
   images: p.images.nodes,
   collections: p.collections.nodes.map((c) => c.handle),
-  variants: p.variants.nodes.map((v) => ({ ...v, image: v.image?.url ?? null, breedte: flat(v.breedte), lengte: flat(v.lengte) })),
+  variants: p.variants.nodes.map((v) => ({
+    ...v,
+    image: v.image?.url ?? null,
+    breedte: flat(v.breedte),
+    lengte: flat(v.lengte),
+    kleurfamilie: flat(v.kleurfamilie),
+    accentkleuren: flat(v.accentkleuren),
+  })),
 }));
 
 fs.mkdirSync(OUT_DIR, { recursive: true });

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Product, ProductOption, Variant } from "@/lib/catalog/types";
 import {
@@ -17,6 +16,7 @@ import {
   variantLabel,
 } from "@/lib/catalog/product";
 import { useCart, useRecentlyViewed } from "@/lib/store/stores";
+import { useProducts } from "@/lib/store/use-products";
 import { SITE } from "@/lib/site/config";
 import { isOpMaat, type Maatwerk } from "@/lib/site/maatwerk";
 import { routes } from "@/lib/routes";
@@ -46,9 +46,13 @@ const AVAIL_TEXT: Record<Variant["availability"], string> = {
  * PDP-kern: galerij (links) + bestelblok (rechts, kleeft bij scrollen) + infosecties
  * onder de galerij. De gekozen variant staat in de URL (?variant=…) zodat een link
  * naar een specifieke kleur/maat werkt.
+ *
+ * De server rendert de standaardvariant (geen useSearchParams: dat zou de hele PDP uit de
+ * server-HTML halen, B02); ?variant= wordt na het laden in de browser toegepast. De
+ * beschikbaarheid komt live uit Shopify (/api/producten?live=1), de rest uit de momentopname.
  */
 export function ProductView({
-  product,
+  product: basis,
   info,
   lineHref,
   lineCount,
@@ -61,22 +65,36 @@ export function ProductView({
   /** Afdeling: wel of geen op-maatverhaal (lib/site/maatwerk.ts). */
   maatwerk: Maatwerk;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const cart = useCart();
   const { announceAdded } = useCartUi();
   const { track } = useRecentlyViewed();
 
-  const initial = variantById(product, params.get("variant") ?? undefined) ?? product.variants.find((v) => v.availability !== "uitverkocht") ?? product.variants[0];
-  const [variant, setVariant] = useState<Variant>(initial);
+  // Live beschikbaarheid over de momentopname leggen (valt stil terug op de momentopname).
+  const { map: live } = useProducts([basis.id], { live: true });
+  const liveVarianten = live.get(basis.id)?.variants;
+  const product = useMemo<Product>(() => {
+    if (!liveVarianten) return basis;
+    const status = new Map(liveVarianten.map((v) => [v.id, v.availability]));
+    return { ...basis, variants: basis.variants.map((v) => ({ ...v, availability: status.get(v.id) ?? v.availability })) };
+  }, [basis, liveVarianten]);
+
+  const [variantId, setVariantId] = useState(() => (basis.variants.find((v) => v.availability !== "uitverkocht") ?? basis.variants[0]).id);
+  const variant: Variant = variantById(product, variantId) ?? product.variants[0];
   const [qty, setQty] = useState(product.quantity.min);
   const [drawer, setDrawer] = useState<ProductOption | null>(null);
   const [error, setError] = useState("");
+  /** Melding wanneer een keuze een andere optie mee moest wijzigen (combinatie bestaat niet, B09). */
+  const [wissel, setWissel] = useState("");
   const buyRef = useRef<HTMLDivElement>(null);
   const [stickyVisible, setStickyVisible] = useState(false);
 
-  useEffect(() => track(product.id), [product.id, track]);
+  useEffect(() => track(basis.id), [basis.id, track]);
+
+  // ?variant=… uit een gedeelde link toepassen (enkel in de browser, zie boven).
+  useEffect(() => {
+    const gevraagd = new URLSearchParams(window.location.search).get("variant");
+    if (gevraagd && variantById(basis, gevraagd)) setVariantId(gevraagd);
+  }, [basis]);
 
   // Ruimte onderaan de pagina zodat de kleverige bestelbalk (mobiel) de footer niet bedekt.
   useEffect(() => {
@@ -104,16 +122,21 @@ export function ProductView({
 
   const choose = (optionName: string, value: string) => {
     const selection = { ...variant.options, [optionName]: value };
+    const exact = findVariant(product, selection);
     const next =
-      findVariant(product, selection) ??
+      exact ??
       product.variants.find((v) => v.options[optionName] === value && v.availability !== "uitverkocht") ??
       product.variants.find((v) => v.options[optionName] === value);
     if (!next) return;
-    setVariant(next);
+    setVariantId(next.id);
     setError("");
-    const q = new URLSearchParams(params.toString());
+    // Bestaat de combinatie niet, dan wisselt een andere optie mee: dat zeggen we (B09).
+    const gewijzigd = exact ? [] : Object.entries(next.options).filter(([k, v]) => k !== optionName && variant.options[k] !== v);
+    setWissel(gewijzigd.length ? `${value} bestaat niet in ${gewijzigd.map(([k]) => `${k.toLowerCase()} ${variant.options[k]}`).join(" en ")}. We kozen ${gewijzigd.map(([k, v]) => `${k.toLowerCase()} ${v}`).join(" en ")}.` : "");
+    // Native history: Next houdt de router in sync, zonder nieuwe serveraanvraag.
+    const q = new URLSearchParams(window.location.search);
     q.set("variant", next.id);
-    router.replace(`${pathname}?${q.toString()}`, { scroll: false });
+    window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`);
   };
 
   const add = () => {
@@ -170,7 +193,7 @@ export function ProductView({
               {[product.brand ?? "Brunic", product.facets.type?.[0]].filter(Boolean).join(" · ")}
             </p>
             <h1 className="mt-1.5 font-display text-[30px] leading-tight lg:text-[36px]">{product.title}</h1>
-            {product.line && product.line !== product.title && <p className="mt-1 text-[15px] text-ink-80">Collectie {product.line}</p>}
+            {product.line && !product.title.includes(product.line) && <p className="mt-1 text-[15px] text-ink-80">Collectie {product.line}</p>}
 
             <Price price={variant.price} pricing={product.pricing} size="lg" className="mt-3" />
             {product.pricing === "fixed" && unit !== "stuk" && variant.price && (
@@ -208,6 +231,11 @@ export function ProductView({
                     </button>
                   );
                 })}
+                {wissel && (
+                  <p role="status" className="flex items-start gap-2 text-[13px] text-ink-80">
+                    <Icon name="info" size={18} className="shrink-0" /> {wissel}
+                  </p>
+                )}
               </div>
             )}
 
@@ -315,7 +343,9 @@ export function ProductView({
           <ul role="list" className="space-y-2 p-4">
             {drawer.values.map((val) => {
               const sel = { ...variant.options, [drawer.name]: val.value };
-              const v = findVariant(product, sel) ?? product.variants.find((x) => x.options[drawer.name] === val.value);
+              const exact = findVariant(product, sel);
+              const v = exact ?? product.variants.find((x) => x.options[drawer.name] === val.value);
+              const andere = product.options.filter((o) => o.name !== drawer.name).map((o) => o.name.toLowerCase());
               const img = product.images.find((im) => im.optionValue === val.value);
               const selected = variant.options[drawer.name] === val.value;
               return (
@@ -338,10 +368,14 @@ export function ProductView({
                     ) : null}
                     <span className="min-w-0 flex-1">
                       <span className="block font-medium">{val.value}</span>
-                      {v && (
-                        <span className={`mt-0.5 block text-[13px] ${AVAIL_TEXT[v.availability]}`}>
-                          {product.pricing === "on-request" ? "Op maat" : AVAILABILITY_LABEL[v.availability]}
-                        </span>
+                      {v && !exact ? (
+                        <span className="mt-0.5 block text-[13px] text-ink-60">Enkel met een andere {andere.join(" of ")}</span>
+                      ) : (
+                        v && (
+                          <span className={`mt-0.5 block text-[13px] ${AVAIL_TEXT[v.availability]}`}>
+                            {product.pricing === "on-request" ? "Op maat" : AVAILABILITY_LABEL[v.availability]}
+                          </span>
+                        )
                       )}
                     </span>
                     {v?.price && <Price price={v.price} size="sm" />}

@@ -104,6 +104,8 @@ export type Availability = "op-voorraad" | "beperkt" | "op-bestelling" | "uitver
 export type ProductImage = ImageRef & {
   /** Hoort dit beeld bij één optiewaarde (bv. Kleur = Grijs)? */
   optionValue?: string;
+  /** Vorm van het tapijt op de foto als die niet rechthoekig is ("Rond", "Organisch", "Loper"). */
+  vorm?: string;
 };
 
 export type OptionValue = {
@@ -135,6 +137,11 @@ export type ProductBadge = "nieuw" | "aanbieding" | "op-maat";
 export type Product = {
   id: string;
   slug: string;
+  /**
+   * Shopify-producten die in dit product opgingen (zelfde ontwerp, zie lib/catalog/ontwerpen.ts).
+   * Hun ID en URL leiden naar dit product.
+   */
+  aliases?: { id: string; slug: string }[];
   title: string;
   /** Merk / leverancier (Shopify vendor). */
   brand?: string;
@@ -159,6 +166,8 @@ export type Product = {
   badges: ProductBadge[];
   /** ISO-datum; bepaalt "Nieuw binnen" en sortering op nieuwste. */
   createdAt: string;
+  /** ISO-datum van de laatste wijziging in Shopify (lastmod in de sitemap). */
+  updatedAt?: string;
   /** Hogere waarde = relevanter bij sorteren op "Aanbevolen". */
   popularity: number;
 };

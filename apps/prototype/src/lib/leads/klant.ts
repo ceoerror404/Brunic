@@ -4,8 +4,8 @@ import type { Lead } from "./types";
 
 /**
  * Elke aanvraag (opmeting, offerte, contact) wordt een klantfiche in Brunics eigen
- * Shopify — de bron van waarheid, zonder extra systeem (eigendomsprincipe). Overgenomen
- * uit apps/web/src/lib/opmeting, veralgemeend naar alle formulieren.
+ * Shopify — de bron van waarheid, zonder extra systeem (eigendomsprincipe). Geldt voor
+ * alle formulieren van de site.
  *
  * Opvolging: na het opslaan zetten we in een APARTE call de tag `opmeting-nieuw`. Dat is
  * een "Customer updated"-gebeurtenis, waarop Shopify Flow een interne mail stuurt en de
@@ -17,11 +17,6 @@ export const TAG_NIEUW = "opmeting-nieuw";
 const ZOEK_OP_EMAIL = /* GraphQL */ `
   query ZoekOpEmail($email: String!) {
     customerByIdentifier(identifier: { emailAddress: $email }) { id note }
-  }
-`;
-const ZOEK_OP_TELEFOON = /* GraphQL */ `
-  query ZoekOpTelefoon($phone: String!) {
-    customerByIdentifier(identifier: { phoneNumber: $phone }) { id note }
   }
 `;
 const MAAK_KLANT = /* GraphQL */ `
@@ -63,6 +58,9 @@ const SOORT_LABEL: Record<Lead["soort"], string> = {
 export function samenvatting(lead: Lead): string {
   return [
     `${SOORT_LABEL[lead.soort]} via de website — ${new Date(lead.tijdstip).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })}`,
+    // Naam en e-mail zoals ingevuld: bij een bestaande klant passen we de fiche zelf niet aan.
+    `Naam: ${[lead.voornaam, lead.naam].filter(Boolean).join(" ")}`,
+    lead.email ? `E-mail: ${lead.email}` : null,
     lead.onderwerp ? `Onderwerp: ${lead.onderwerp}` : null,
     lead.telefoonRuw ? `Telefoon: ${lead.telefoonRuw}` : null,
     lead.postcode ? `Postcode: ${lead.postcode}` : null,
@@ -76,13 +74,15 @@ export function samenvatting(lead: Lead): string {
 }
 
 /**
- * Toestemming bewijsbaar vastleggen: de letterlijke tekst, de bron en het tijdstip. Ook een
- * geweigerde marketing-opt-in — dat bewijst dat het gevraagd werd.
+ * Toestemming bewijsbaar vastleggen: de letterlijke tekst, de bron en het tijdstip. Bij een
+ * nieuwe klant ook een geweigerde marketing-opt-in — dat bewijst dat het gevraagd werd.
+ *
+ * Bij een bestaande klant (`bestaand`) overschrijft een formulier zonder marketingvinkje het
+ * eerder vastgelegde marketingbewijs niet: iedereen kan een formulier met andermans e-mailadres
+ * versturen, en dat mag een echte inschrijving niet wissen.
  */
-function metafields(lead: Lead) {
-  return [
-    { namespace: "brunic", key: "laatste_aanvraag", type: "multi_line_text_field", value: samenvatting(lead) },
-    { namespace: "brunic", key: "consent_service_tekst", type: "multi_line_text_field", value: SERVICE_CONSENT_TEKST },
+function metafields(lead: Lead, bestaand = false) {
+  const marketingBewijs = [
     {
       namespace: "brunic",
       key: "consent_marketing_tekst",
@@ -91,6 +91,11 @@ function metafields(lead: Lead) {
     },
     { namespace: "brunic", key: "consent_bron", type: "single_line_text_field", value: lead.bron },
     { namespace: "brunic", key: "consent_tijdstip", type: "date_time", value: lead.tijdstip },
+  ];
+  return [
+    { namespace: "brunic", key: "laatste_aanvraag", type: "multi_line_text_field", value: samenvatting(lead) },
+    { namespace: "brunic", key: "consent_service_tekst", type: "multi_line_text_field", value: SERVICE_CONSENT_TEKST },
+    ...(bestaand && !lead.marketing ? [] : marketingBewijs),
   ];
 }
 
@@ -102,16 +107,14 @@ function emailConsent(email: string, marketing: boolean, tijdstip: string) {
     : { marketingState: "NOT_SUBSCRIBED" as const, consentUpdatedAt: tijdstip };
 }
 
-async function zoekKlant(email: string, telefoon: string | null): Promise<Klant | null> {
-  if (email) {
-    const d = await admin<{ customerByIdentifier: Klant | null }>(ZOEK_OP_EMAIL, { email });
-    if (d.customerByIdentifier) return d.customerByIdentifier;
-  }
-  if (telefoon) {
-    const d = await admin<{ customerByIdentifier: Klant | null }>(ZOEK_OP_TELEFOON, { phone: telefoon });
-    if (d.customerByIdentifier) return d.customerByIdentifier;
-  }
-  return null;
+/**
+ * Bestaande klant enkel op e-mailadres (verplicht in elk formulier). Niet op telefoon: dan
+ * zou een aanvraag met een ander e-mailadres aan de fiche van een ander persoon hangen.
+ */
+async function zoekKlant(email: string): Promise<Klant | null> {
+  if (!email) return null;
+  const d = await admin<{ customerByIdentifier: Klant | null }>(ZOEK_OP_EMAIL, { email });
+  return d.customerByIdentifier;
 }
 
 /** Nieuwe aanvraag bovenaan de klantnotitie; eerdere aanvragen blijven eronder staan. */
@@ -119,25 +122,25 @@ function notitie(nieuw: string, oud: string | null) {
   return (oud ? `${nieuw}\n\n————————\n\n${oud}` : nieuw).slice(0, 5000);
 }
 
-/** Maakt of werkt de klant bij. Gooit bij fouten — de aanroeper vangt dat af. */
+/**
+ * Maakt of werkt de klant bij. Gooit bij fouten — de aanroeper vangt dat af.
+ *
+ * Bestaat de klant al (zelfde e-mailadres), dan voegen we enkel toe: de aanvraag bovenaan
+ * de notitie, tags en het aanvraag-metafield. Naam en telefoon op de fiche blijven zoals
+ * ze waren — een formulier is niet geauthenticeerd en mag geen klantgegevens wijzigen (B03).
+ */
 export async function bewaarKlant(lead: Lead): Promise<string> {
-  const gedeeld = {
-    firstName: lead.voornaam || undefined,
-    lastName: lead.naam || undefined,
-    phone: lead.telefoon ?? undefined,
-    tags: ["website", `lead-${lead.soort}`, ...(lead.marketing ? ["nieuwsbrief"] : [])],
-    metafields: metafields(lead),
-  };
+  const tags = ["website", `lead-${lead.soort}`, ...(lead.marketing ? ["nieuwsbrief"] : [])];
   const consent = emailConsent(lead.email, lead.marketing, lead.tijdstip);
 
   async function werkBij(klant: Klant) {
     // customerUpdate weigert het consentveld: dat is een aparte call. Een bestaande
     // inschrijving zetten we nooit terug op NOT_SUBSCRIBED door een leeg vinkje.
     const data = await admin<{ customerUpdate: Result }>(WERK_KLANT_BIJ, {
-      input: { id: klant.id, ...gedeeld, tags: undefined, note: notitie(samenvatting(lead), klant.note) },
+      input: { id: klant.id, note: notitie(samenvatting(lead), klant.note), metafields: metafields(lead, true) },
     });
     if (!data.customerUpdate.customer) throw new Error(data.customerUpdate.userErrors[0]?.message ?? "Klant bijwerken mislukt.");
-    await admin(TAGS_TOEVOEGEN, { id: klant.id, tags: gedeeld.tags });
+    await admin(TAGS_TOEVOEGEN, { id: klant.id, tags });
     if (lead.marketing && consent) {
       const res = await admin<{ customerEmailMarketingConsentUpdate: { userErrors: { message: string }[] } }>(CONSENT_BIJWERKEN, {
         input: { customerId: klant.id, emailMarketingConsent: consent },
@@ -147,18 +150,34 @@ export async function bewaarKlant(lead: Lead): Promise<string> {
     return klant.id;
   }
 
-  const bestaand = await zoekKlant(lead.email, lead.telefoon);
+  const bestaand = await zoekKlant(lead.email);
   if (bestaand) return werkBij(bestaand);
 
-  const data = await admin<{ customerCreate: Result }>(MAAK_KLANT, {
-    input: { email: lead.email || undefined, ...gedeeld, note: samenvatting(lead), emailMarketingConsent: consent },
-  });
-  const { customer, userErrors } = data.customerCreate;
+  const maak = (phone: string | undefined) =>
+    admin<{ customerCreate: Result }>(MAAK_KLANT, {
+      input: {
+        email: lead.email || undefined,
+        firstName: lead.voornaam || undefined,
+        lastName: lead.naam || undefined,
+        phone,
+        tags,
+        metafields: metafields(lead),
+        note: samenvatting(lead),
+        emailMarketingConsent: consent,
+      },
+    });
+  let { customer, userErrors } = (await maak(lead.telefoon ?? undefined)).customerCreate;
+
+  // Telefoonnummer al in gebruik bij een andere klant (Shopify eist uniek): zonder nummer
+  // aanmaken — het staat ook in de notitie. Nooit aan die andere klant koppelen.
+  if (!customer && lead.telefoon && userErrors.some((e) => e.field?.includes("phone"))) {
+    ({ customer, userErrors } = (await maak(undefined)).customerCreate);
+  }
   if (customer) return customer.id;
 
-  // Vangnet tegen een race (twee aanvragen tegelijk): de klant bestond tóch al.
+  // Vangnet tegen een race (twee aanvragen tegelijk): de klant met dit e-mailadres bestond tóch al.
   if (userErrors.some((e) => /taken|already exists/i.test(e.message))) {
-    const k = await zoekKlant(lead.email, lead.telefoon);
+    const k = await zoekKlant(lead.email);
     if (k) return werkBij(k);
   }
   throw new Error(userErrors[0]?.message ?? "Klant aanmaken mislukt.");
@@ -180,7 +199,7 @@ export async function markeerVoorOpvolging(klantId: string): Promise<void> {
 /** Nieuwsbrief: klant aanmaken of bijwerken met e-mailtoestemming (single opt-in). */
 export async function schrijfInVoorNieuwsbrief(email: string, tijdstip: string): Promise<void> {
   const consent = emailConsent(email, true, tijdstip)!;
-  const bestaand = await zoekKlant(email, null);
+  const bestaand = await zoekKlant(email);
   if (bestaand) {
     await admin(TAGS_TOEVOEGEN, { id: bestaand.id, tags: ["nieuwsbrief", "website"] });
     await admin(CONSENT_BIJWERKEN, { input: { customerId: bestaand.id, emailMarketingConsent: consent } });

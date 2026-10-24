@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // set-etalage.mjs — zet de brunic.etalage-vlag op alle producten van één collectie.
 // Etalage = tonen-niet-verkopen: de storefront verbergt prijs + koopknop en toont
-// "prijs op aanvraag / kom langs" (server-guard bewaakVariant blokkeert de checkout).
+// "prijs op aanvraag / kom langs" (apps/prototype/src/app/api/kassa/route.ts blokkeert de checkout).
 //
 //   node packages/catalog/set-etalage.mjs <collectie-handle> <true|false>
 //   node packages/catalog/set-etalage.mjs raamdecoratie true

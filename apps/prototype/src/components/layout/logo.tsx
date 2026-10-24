@@ -2,8 +2,8 @@ import Link from "next/link";
 import { routes } from "@/lib/routes";
 
 /**
- * Brunic-logo (kleurversie: geel vlak met mascotte + rode woordmerk, bron brunic.be /
- * apps/web). ⏳ Vectorlogo volgt van de klant — dan hier vervangen door de SVG.
+ * Brunic-logo (kleurversie: geel vlak met mascotte + rode woordmerk, bron brunic.be).
+ * ⏳ Vectorlogo volgt van de klant — dan hier vervangen door de SVG.
  */
 export function Logo({ className = "" }: { className?: string }) {
   return (

@@ -1,7 +1,9 @@
 import { catalog } from "./repository";
+import { categorieInhoud } from "@/lib/inhoud/categorie";
 import type { CategoryNode, ImageRef, Product } from "./types";
 
-const IS_SFEER = / – sfeerfoto/;
+/** Alt-tekst "… – sfeerfoto" (ook met een gewoon streepje of hoofdletters, zoals het personeel het typt). */
+export const IS_SFEER = /\s[–-]\s*sfeerfoto/i;
 
 /** De eerste sfeerfoto (kamerbeeld van de leverancier) van een product, anders undefined. */
 export function sfeerfoto(p: Product): ImageRef | undefined {
@@ -9,12 +11,14 @@ export function sfeerfoto(p: Product): ImageRef | undefined {
 }
 
 /**
- * Tegelbeeld voor een categorie: het eigen categoriebeeld (src/data/categories.ts), anders
- * de sfeerfoto van het meest aanbevolen product erin, anders zijn eerste productfoto.
- * Zo toont elke subcategorie een leveranciersbeeld uit haar eigen assortiment.
+ * Tegelbeeld voor een categorie: de foto uit de Shopify-admin ("Categorie | Tekst en foto"),
+ * anders het eigen categoriebeeld (src/data/categories.ts), anders de sfeerfoto van het meest
+ * aanbevolen product erin, anders zijn eerste productfoto. Zo toont elke subcategorie een
+ * leveranciersbeeld uit haar eigen assortiment.
  */
 export async function categoryImage(node: CategoryNode): Promise<ImageRef | undefined> {
-  if (node.image?.src) return node.image;
+  const eigen = (await categorieInhoud(node)).image;
+  if (eigen) return eigen;
   const products = [...(await catalog.getProductsInCategory(node.id))].sort((a, b) => b.popularity - a.popularity);
   for (const p of products) {
     const s = sfeerfoto(p);

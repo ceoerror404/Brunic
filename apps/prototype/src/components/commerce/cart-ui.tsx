@@ -9,6 +9,7 @@ import type { ImageRef, Price as PriceT } from "@/lib/catalog/types";
 import { formatMoney, formatQuantity, lineTotal, UNIT_NAME } from "@/lib/catalog/product";
 import { useCart } from "@/lib/store/stores";
 import { routes } from "@/lib/routes";
+import { KassaOpvolging } from "./kassa-opvolging";
 
 type Added = { title: string; image?: ImageRef; variantLabel?: string; quantity: number; price: PriceT };
 
@@ -32,6 +33,7 @@ export function CartUiProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
+      <KassaOpvolging />
       <Drawer
         open={added !== null}
         onClose={close}

@@ -16,9 +16,9 @@ export function Hero({
   image,
   links,
 }: {
-  ticket: string;
+  ticket?: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   cta: { label: string; href: string };
   secondary?: { label: string; href: string };
   image: ImageRef;
@@ -31,11 +31,11 @@ export function Hero({
         <div className="hero-shade absolute inset-0 max-lg:bg-[linear-gradient(180deg,rgb(19_12_12/0.05),rgb(19_12_12/0.5))]" aria-hidden="true" />
         <div className="absolute inset-0 flex items-end justify-center p-6 pb-10 text-white lg:items-center lg:justify-start lg:p-12">
           <div className="flex flex-col items-center text-center">
-            <p className="ticket mb-5 bg-white px-6 py-2 text-[13px] text-ink">{ticket}</p>
+            {ticket && <p className="ticket mb-5 bg-white px-6 py-2 text-[13px] text-ink">{ticket}</p>}
             <h1 id="hero-titel" className="font-display text-[44px] leading-[1.1] [text-shadow:0_2px_16px_rgb(0_0_0/0.25)] md:text-[56px] lg:text-[64px] lg:leading-[80px]">
               {title}
             </h1>
-            <p className="mt-2 text-lg font-medium [text-shadow:0_1px_8px_rgb(0_0_0/0.3)] lg:text-[22px]">{subtitle}</p>
+            {subtitle && <p className="mt-2 text-lg font-medium [text-shadow:0_1px_8px_rgb(0_0_0/0.3)] lg:text-[22px]">{subtitle}</p>}
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link href={cta.href} className="btn btn-picture">
                 {cta.label}

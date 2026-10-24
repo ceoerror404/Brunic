@@ -28,6 +28,17 @@ export type CardProduct = {
   swatches: { value: string; swatch?: string; image?: ImageRef; variantId?: string }[];
   /** Totaal aantal kleuren (de kaart toont er max. 4 + "+N"). */
   swatchTotal: number;
+  /**
+   * Foto's per bijzondere vorm (Rond, Organisch, Loper): in een lijst van ronde tapijten toont de
+   * kaart het ronde tapijt. Enkel op de server; buildListing haalt het weg voor de browser.
+   */
+  vormen?: Record<string, { image?: ImageRef; perKleur: Record<string, ImageRef> }>;
+};
+
+/** Subcategorieën waar de kaart de foto in die vorm toont (id = "s-" + Shopify-handle). */
+export const VORM_VAN_CATEGORIE: Record<string, string> = {
+  "s-tapijten-rond": "Rond",
+  "s-tapijten-speciale-vormen": "Organisch",
 };
 
 export type ListingItem = CardProduct & {
@@ -41,7 +52,15 @@ const AVAIL_RANK: Availability[] = ["op-voorraad", "beperkt", "op-bestelling", "
 export function toCard(p: Product): CardProduct {
   const best = [...p.variants].sort((a, b) => AVAIL_RANK.indexOf(a.availability) - AVAIL_RANK.indexOf(b.availability))[0];
   const color = p.options.find((o) => o.name === "Kleur");
+  const vormen: NonNullable<CardProduct["vormen"]> = {};
+  for (const v of new Set(p.images.map((i) => i.vorm).filter((x): x is string => Boolean(x)))) {
+    const metVorm = p.images.filter((i) => i.vorm === v);
+    const perKleur: Record<string, ImageRef> = {};
+    for (const i of metVorm) if (i.optionValue && !perKleur[i.optionValue]) perKleur[i.optionValue] = img(i, false)!;
+    vormen[v] = { image: img(metVorm[0]), perKleur };
+  }
   return {
+    ...(Object.keys(vormen).length ? { vormen } : {}),
     id: p.id,
     slug: p.slug,
     title: p.title,
@@ -49,7 +68,7 @@ export function toCard(p: Product): CardProduct {
     type: p.facets.type?.[0],
     image: img(p.images[0]),
     // Hover: de sfeerfoto (kamerbeeld), anders een tweede neutrale foto.
-    hoverImage: img(p.images.find((i, n) => n > 0 && / – sfeerfoto/.test(i.alt)) ?? (p.images[1] && !p.images[1].optionValue ? p.images[1] : undefined), false),
+    hoverImage: img(p.images.find((i, n) => n > 0 && /\s[–-]\s*sfeerfoto/i.test(i.alt)) ?? (p.images[1] && !p.images[1].optionValue ? p.images[1] : undefined), false),
     badges: p.badges,
     pricing: p.pricing,
     price: lowestPrice(p),
