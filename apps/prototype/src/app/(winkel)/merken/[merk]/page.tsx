@@ -49,7 +49,7 @@ export default async function BrandPage({ params, searchParams }: Props) {
   if (!brand) notFound();
   const tree = await catalog.getTree();
   const items = brand.products.map((p) => toListingItem(p, tree));
-  // Band volgens de afdeling van dit merk (Arte → behang → winkel; ADO → stoffen → op maat).
+  // Band volgens de afdeling van dit merk (Boråstapeter → behang → winkel; ADO → stoffen → op maat).
   const afdeling = brand.products[0] ? (await catalog.getCategoryTrail(brand.products[0].primaryCategoryId))[0]?.id : undefined;
   const intro = `Ontdek ${productCount(brand.count)} van ${brand.name} in onze webshop: ${brand.types.join(", ").toLowerCase()}. Wilt u een stof, behang of tapijt in het echt zien of weten wat het kost op uw maten? Vraag vrijblijvend een offerte aan of kom langs in onze winkel in Ninove.`;
 

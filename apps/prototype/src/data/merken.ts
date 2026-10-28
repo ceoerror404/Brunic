@@ -16,7 +16,6 @@
  */
 export const MERK_LOGO: Record<string, { src: string; wit?: boolean }> = {
   ado: { src: "/merken/ado.svg" },
-  arte: { src: "/merken/arte.svg" },
   borastapeter: { src: "/merken/borastapeter.svg" },
   "associated-weavers": { src: "/merken/associated-weavers.svg" },
   artelux: { src: "/merken/artelux.svg" },

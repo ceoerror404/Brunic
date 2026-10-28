@@ -32,7 +32,7 @@ Brunic past zelf teksten en foto's van de site aan in de Shopify-admin (**Inhoud
 - **Webhooks registreren ná de deploy** die de route bevat: `node packages/catalog/register-webhooks.mjs https://brunic.vercel.app` (eerst `--dry-run`). Niet vóór de deploy: falende leveringen laten Shopify de webhook uitschakelen.
 - Op Vercel moet `SHOPIFY_CLIENT_SECRET` (of `SHOPIFY_WEBHOOK_SECRET`) gezet zijn, anders weigert de route elke webhook (401).
 - Bij de overdracht naar Bruno's Basic-store: metaobject-definities + inhoud meeverhuizen (script nodig; de definities zijn niet in de repo vastgelegd, enkel in de dev-store).
-- Interne links in tegels zijn vrije tekst (`/catalogus/behang`). Sinds 20/10 gevalideerd (`lib/site/doel.ts` → `bestaatLink`): een link naar een onbestaande pagina wordt overgeslagen met een waarschuwing in de log. **Nu in de dev-store:** trends-tegel "Grafisch & speels" → `/product/behang-nastri-arte` bestaat niet (meer) — aanpassen in de admin.
+- Interne links in tegels zijn vrije tekst (`/catalogus/behang`). Sinds 20/10 gevalideerd (`lib/site/doel.ts` → `bestaatLink`): een link naar een onbestaande pagina wordt overgeslagen met een waarschuwing in de log. Trends-tegel "Grafisch & speels" wees naar `/product/behang-nastri-arte` (Arte is offline) en viel daardoor weg; op 24/10 in de dev-store én in `src/data/home.ts` vervangen door ESTAhome "Fotobehang cirkels in Bauhaus stijl roze, okergeel en mintgroen" (foto als kopie `brunic-site-…-264258fe9e.jpg` in Bestanden).
 
 ## Verificatie 19/10
 - typecheck ✅, `next build` ✅ (home statisch + 5 min verversing).

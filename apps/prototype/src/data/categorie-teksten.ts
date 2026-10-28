@@ -7,9 +7,9 @@ export const CATEGORIE_TEKST: Record<string, { subtitle: string; intro: string }
       "Een gordijn bepaalt hoe het licht binnenvalt en hoe een ruimte aanvoelt. Bij Brunic vindt u gordijnstoffen van onder meer ADO, Artelux en Loft79: effen stoffen, stoffen met tekening, isolerende en verduisterende kwaliteiten en brandvrije stoffen voor projecten, samen met passementen en benodigdheden. Veel stoffen zijn kamerhoog geweven, tot 300 cm breed, en worden per lopende meter verkocht. Kiest u voor gordijnen op maat, dan meten wij gratis bij u thuis op, maken onze eigen stiksters uw gordijnen in ons atelier en hangen onze eigen mensen ze bij u op. Kom de stoffen gerust voelen in onze winkel in Ninove.",
   },
   behang: {
-    subtitle: "Behang en wandbekleding van Arte en Boråstapeter",
+    subtitle: "Behang en fotobehang van ESTAhome, Boråstapeter, Origin en meer",
     intro:
-      "Behang geeft een ruimte in één keer karakter, van een rustige effen wand tot een uitgesproken bloemenmotief of een fijne streep. In ons assortiment vindt u behang en wandbekleding van Arte, het Belgische merk met textiel-, vinyl- en natuurlijke wandbekleding en collecties als Flamant en Missoni Home, en van het Zweedse Boråstapeter, dat ook fotobehang op maat maakt. Behang wordt per rol verkocht, wandbekleding van Arte vaak per lopende meter. In onze winkel in Ninove bladert u door de stalenboeken, helpen wij u kiezen en berekenen we hoeveel u nodig hebt.",
+      "Behang geeft een ruimte in één keer karakter, van een rustige effen wand tot een uitgesproken bloemenmotief of een fijne streep. In ons assortiment vindt u behang en fotobehang van onder meer ESTAhome, Origin Wallcoverings en het Zweedse Boråstapeter, dat ook fotobehang op maat maakt. Behang wordt per rol verkocht, fotobehang per stuk of op maat van uw wand. In onze winkel in Ninove bladert u door de stalenboeken, helpen wij u kiezen en berekenen we hoeveel u nodig hebt.",
   },
   vloerbekleding: {
     subtitle: "Vasttapijt, tapijttegels en lopers, vakkundig gelegd",
@@ -162,7 +162,7 @@ export const CATEGORIE_TEKST: Record<string, { subtitle: string; intro: string }
   "behang-effen": {
     subtitle: "Effen behang met structuur voor een rustige wand",
     intro:
-      "Effen behang brengt rust in een ruimte en vormt een mooie achtergrond voor uw meubels, gordijnen en kunst. Door de structuur, van linnenlook tot textiel of natuurlijke materialen, krijgt een effen wand toch diepte en karakter. Bij Arte en Boråstapeter vindt u een ruime keuze.",
+      "Effen behang brengt rust in een ruimte en vormt een mooie achtergrond voor uw meubels, gordijnen en kunst. Door de structuur, van linnenlook tot textiel of natuurlijke materialen, krijgt een effen wand toch diepte en karakter. Bij ESTAhome en Origin Wallcoverings vindt u een ruime keuze.",
   },
   "behang-bloemen": {
     subtitle: "Bloemenbehang voor warmte en beweging",

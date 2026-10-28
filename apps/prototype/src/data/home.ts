@@ -40,7 +40,7 @@ export const CAMPAIGNS: { title: string; subtitle: string; cta: string; doel: Do
   },
   {
     title: "Behang met karakter",
-    subtitle: "Arte en Boråstapeter: van bloemen tot panoramische wanden",
+    subtitle: "Boråstapeter, ESTAhome en Origin: van bloemen tot fotobehang",
     cta: "Bekijk het behang",
     doel: { categoryId: "c02" },
     image: BEELD.campagneBehang,
@@ -50,7 +50,7 @@ export const CAMPAIGNS: { title: string; subtitle: string; cta: string; doel: Do
 /** "De trends van het moment": elk beeld linkt naar het product of de categorie op de foto. */
 export const TRENDS: { title: string; cta: string; doel: Doel; image: ImageRef }[] = [
   { title: "Warm naturel", cta: "Lees de tips", doel: { article: "warme-tinten" }, image: BEELD.trendNaturel },
-  { title: "Grafisch & speels", cta: "Bekijk dit behang", doel: { product: "behang-nastri-arte" }, image: BEELD.trendGrafisch },
+  { title: "Grafisch & speels", cta: "Bekijk dit behang", doel: { product: "fotobehang-cirkels-in-bauhaus-stijl-roze-okergeel-en-mintgroen-estahome" }, image: BEELD.trendGrafisch },
   { title: "Diep & donker", cta: "Verduisterende stoffen", doel: { categoryId: "s-stoffen-isolerend-verduisterend" }, image: BEELD.trendDiep },
 ];
 

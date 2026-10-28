@@ -18,7 +18,7 @@ export function SeoText() {
           afwerking, en plaatsen alles met onze eigen mensen — in Ninove en de ruime Denderstreek.
         </p>
         <p className="mt-3">
-          In de webshop ontdekt u het assortiment van merken als ADO, Artelux, Loft79, Arte, Boråstapeter, Associated Weavers, Balsan, Desso en Louis De Poortere.
+          In de webshop ontdekt u het assortiment van merken als ADO, Artelux, Loft79, ESTAhome, Boråstapeter, Associated Weavers, Balsan, Desso en Louis De Poortere.
           Bewaar uw favorieten op uw verlanglijst, vraag vrijblijvend een offerte aan of breng uw lijst mee naar de winkel.
         </p>
       </div>

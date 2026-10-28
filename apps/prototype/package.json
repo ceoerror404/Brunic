@@ -10,7 +10,8 @@
     "start": "next start --port 3100",
     "sync": "node scripts/sync-shopify.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:filters": "node --no-warnings --import ./scripts/test-filters/register.mjs scripts/test-filters/test-filters.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",

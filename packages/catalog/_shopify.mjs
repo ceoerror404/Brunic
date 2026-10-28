@@ -45,17 +45,26 @@ async function clientToken() {
 const TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || (await clientToken());
 
 export async function admin(query, variables = {}) {
-  const res = await fetch(`https://${DOMAIN}/admin/api/${VERSION}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": TOKEN },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(`Admin API weigert de token (HTTP ${res.status}) — scopes?`);
+  for (let poging = 1; ; poging++) {
+    const res = await fetch(`https://${DOMAIN}/admin/api/${VERSION}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": TOKEN },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`Admin API weigert de token (HTTP ${res.status}) — scopes?`);
+    }
+    const json = await res.json().catch(() => ({}));
+    // Throttled (429 of THROTTLED): even wachten en opnieuw, zoals scripts/sync-shopify.mjs. Grote
+    // reeksen schrijfopdrachten (25 metafields per oproep) lopen anders halverwege vast.
+    const throttled = res.status === 429 || json.errors?.some?.((e) => e.extensions?.code === "THROTTLED");
+    if (throttled && poging < 10) {
+      await new Promise((r) => setTimeout(r, 1000 * poging));
+      continue;
+    }
+    if (json.errors || !res.ok) throw new Error(`GraphQL (HTTP ${res.status}): ` + JSON.stringify(json.errors ?? json).slice(0, 400));
+    return json.data;
   }
-  const json = await res.json();
-  if (json.errors) throw new Error("GraphQL: " + JSON.stringify(json.errors));
-  return json.data;
 }
 
 export { DOMAIN, VERSION };

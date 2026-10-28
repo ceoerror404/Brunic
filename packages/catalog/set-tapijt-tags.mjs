@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// set-tapijt-tags.mjs — zet de nagekeken tapijt-tags (foto-tagging + menselijke review) in Shopify.
-// Bron: de export uit de reviewpagina (../Data/BRUNIC_TAPIJT_TAGS_<datum>.json).
+// set-tapijt-tags.mjs — zet nagekeken fototags (foto-tagging + menselijke review) in Shopify.
+// Gebruikt voor de vloerkleden (22/10) en de gordijnstoffen (`--type Gordijnstof,Passement`).
+// Bron: de export uit de reviewpagina (../Data/BRUNIC_<SOORT>_TAGS_<datum>.json).
 //   brunic.kleurfamilie per variant    hoofdkleur van die kleurvariant, alle maten
 //   brunic.accentkleuren per variant   0–2 accentkleuren (voor het kleurbolletje op de site)
 //   brunic.kleurfamilie op product     veld met 1 waarde: meest voorkomende hoofdkleur
@@ -8,17 +9,21 @@
 // Ontbrekende definities worden aangemaakt. Idempotent: schrijft enkel wat verschilt.
 // Schrijft een log met de oude waarden.
 //
-//   node packages/catalog/set-tapijt-tags.mjs <export.json> [--go]
+//   node packages/catalog/set-tapijt-tags.mjs <export.json> [--type Vloerkleed] [--go]
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { admin, DOMAIN } from "./_shopify.mjs";
 
 const GO = process.argv.includes("--go");
-const pad = process.argv.slice(2).find((a) => !a.startsWith("--"));
+const args = process.argv.slice(2);
+const typeArg = args.includes("--type") ? args[args.indexOf("--type") + 1] : "Vloerkleed";
+const pad = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--type");
 if (!pad) {
-  console.error("Gebruik: node packages/catalog/set-tapijt-tags.mjs <export.json> [--go]");
+  console.error("Gebruik: node packages/catalog/set-tapijt-tags.mjs <export.json> [--type Vloerkleed] [--go]");
   process.exit(1);
 }
+// Producttypes uit de export (komma's = meerdere): enkel die producten worden vergeleken.
+const PRODUCT_QUERY = typeArg.split(",").map((t) => `product_type:"${t.trim()}"`).join(" OR ");
 
 // Vaste lijsten = die van de reviewpagina. Uitbreiden (bv. voor behang) = hier + de keuzelijst
 // van de definitie bijwerken. Kleuren = de keuzelijst van brunic.kleurfamilie in Shopify.
@@ -55,7 +60,7 @@ const shop = [];
 let cursor = null;
 do {
   const d = await admin(
-    `query($c:String){ products(first:50, after:$c, query:"product_type:Vloerkleed"){
+    `query($c:String, $q:String){ products(first:50, after:$c, query:$q){
       nodes{ id handle
         kf: metafield(namespace:"brunic", key:"kleurfamilie"){ value }
         motief: metafield(namespace:"brunic", key:"motief"){ value }
@@ -64,7 +69,7 @@ do {
           kf: metafield(namespace:"brunic", key:"kleurfamilie"){ value }
           acc: metafield(namespace:"brunic", key:"accentkleuren"){ value } } } }
       pageInfo{ hasNextPage endCursor } } }`,
-    { c: cursor },
+    { c: cursor, q: PRODUCT_QUERY },
   );
   shop.push(...d.products.nodes);
   cursor = d.products.pageInfo.hasNextPage ? d.products.pageInfo.endCursor : null;
@@ -147,7 +152,9 @@ for (let i = 0; i < schrijven.length; i += 25) {
   }
 }
 const stempel = new Date().toISOString();
-const logPad = join(dirname(pad), `BRUNIC_TAPIJT_TAGS_SHOPIFY_PUSH_LOG_${stempel.slice(0, 19).replace(/[:T]/g, "-")}.json`);
+// BRUNIC_STOFFEN_TAGS_2026-10-25.json → BRUNIC_STOFFEN_TAGS_SHOPIFY_PUSH_LOG_<tijd>.json
+const prefix = basename(pad).replace(/_\d{4}-\d{2}-\d{2}.*$/, "").replace(/\.json$/, "");
+const logPad = join(dirname(pad), `${prefix}_SHOPIFY_PUSH_LOG_${stempel.slice(0, 19).replace(/[:T]/g, "-")}.json`);
 writeFileSync(logPad, JSON.stringify({ winkel: DOMAIN, op: stempel, geschreven: schrijven.length, fouten, wijzigingen: log }, null, 2));
 console.log(`\nGeschreven: ${schrijven.length - fouten.length} van ${schrijven.length}${fouten.length ? ` · fouten: ${fouten.length}` : ""}`);
 fouten.slice(0, 20).forEach((f) => console.log("! " + f));

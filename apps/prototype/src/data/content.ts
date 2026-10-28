@@ -247,7 +247,7 @@ export const SERVICES: Service[] = [
     slug: "behang-en-fotobehang",
     title: "Behangadvies & fotobehang op maat",
     summary:
-      "Hulp bij het kiezen van behang en wandbekleding van Arte en Boråstapeter, van effen en gestreept tot bloemen en panoramisch behang. Voor één blikvangerwand kiest u fotobehang op maat.",
+      "Hulp bij het kiezen van behang en fotobehang van onder meer ESTAhome, Origin Wallcoverings en Boråstapeter, van effen en gestreept tot bloemen en grafische motieven. Voor één blikvangerwand kiest u fotobehang op maat.",
     image: BEELD.dienstBehang,
     steps: [
       {
@@ -260,7 +260,7 @@ export const SERVICES: Service[] = [
       },
       {
         title: "Berekening",
-        text: "Op basis van de afmetingen van uw wanden berekenen we hoeveel rollen of lopende meters u nodig hebt.",
+        text: "Op basis van de afmetingen van uw wanden berekenen we hoeveel rollen u nodig hebt.",
       },
       {
         title: "Bestelling",
@@ -268,10 +268,10 @@ export const SERVICES: Service[] = [
       },
     ],
     body: [
-      "Behang geeft een ruimte in één keer karakter. Een effen behang met een subtiele structuur brengt rust, een streep geeft ritme en hoogte, een bloemenmotief zorgt voor warmte en beweging. In onze winkel in Ninove vindt u behang en wandbekleding van Arte en Boråstapeter. Arte is een Belgisch merk met onder meer textiel-, vinyl- en natuurlijke wandbekleding en collecties als Flamant en Missoni Home. Boråstapeter is een Zweeds behangmerk dat ook fotobehang op maat maakt.",
+      "Behang geeft een ruimte in één keer karakter. Een effen behang met een subtiele structuur brengt rust, een streep geeft ritme en hoogte, een bloemenmotief zorgt voor warmte en beweging. Bij Brunic vindt u behang en fotobehang van onder meer ESTAhome, Origin Wallcoverings en Boråstapeter. Boråstapeter is een Zweeds behangmerk dat ook fotobehang op maat maakt.",
       "Kiezen is vaak het moeilijkste. Een klein staal zegt weinig over hoe een motief op een volledige wand werkt. Daarom kijken we samen naar de ruimte: hoe groot is ze, hoeveel daglicht valt er binnen, welke kleuren hebben uw vloer, uw gordijnen en uw meubels? Wij tonen u hoe een motief zich herhaalt en adviseren over de schaal. In een kleine ruimte werkt een fijn patroon anders dan een groot dessin, en een streep anders in een lage dan in een hoge kamer.",
-      "Voor één blikvangerwand is fotobehang of panoramisch behang een sterke keuze. Een panoramisch behang loopt als één groot beeld over de wand, zonder dat het motief zich herhaalt. Bij Arte vindt u panoramische ontwerpen, en bij Boråstapeter kunt u fotobehang op maat laten maken, afgestemd op de afmetingen van uw wand. Zo bepaalt u zelf welk deel van het beeld waar komt, en valt er geen belangrijk stuk van het motief weg achter een kast of in een hoek.",
-      "Wij berekenen voor u hoeveel rollen of lopende meters u nodig hebt, rekening houdend met de patroonherhaling en een kleine reserve. Behang wordt meestal per rol verkocht, wandbekleding van Arte vaak per lopende meter. Breng de maten van uw wanden mee naar de winkel, of beschrijf uw project in het aanvraagformulier. Wij nemen binnen 1 à 2 werkdagen contact met u op en helpen u met de keuze en de bestelling.",
+      "Voor één blikvangerwand is fotobehang of panoramisch behang een sterke keuze. Een panoramisch behang loopt als één groot beeld over de wand, zonder dat het motief zich herhaalt. Bij ESTAhome en Origin Wallcoverings vindt u fotobehang in vaste afmetingen, en bij Boråstapeter kunt u fotobehang op maat laten maken, afgestemd op de afmetingen van uw wand. Zo bepaalt u zelf welk deel van het beeld waar komt, en valt er geen belangrijk stuk van het motief weg achter een kast of in een hoek.",
+      "Wij berekenen voor u hoeveel rollen u nodig hebt, rekening houdend met de patroonherhaling en een kleine reserve. Behang wordt per rol verkocht, fotobehang per stuk of op maat van uw wand. Breng de maten van uw wanden mee naar de winkel, of beschrijf uw project in het aanvraagformulier. Wij nemen binnen 1 à 2 werkdagen contact met u op en helpen u met de keuze en de bestelling.",
     ],
     relatedCategoryIds: ["c02"],
   },
@@ -414,7 +414,7 @@ export const ARTICLES: Article[] = [
       {
         heading: "Begin met één wand",
         paragraphs: [
-          "Twijfelt u, begin dan met één wand: de wand achter het bed, achter de zetel of tegenover de deur. Zo ervaart u het effect van een motief zonder de ruimte te overladen. In onze winkel in Ninove kunt u behang van Arte en Boråstapeter bekijken en voelen, van effen en gestreept tot bloemen. Neem gerust de maten van uw wanden mee; dan berekenen we meteen hoeveel rollen u nodig hebt.",
+          "Twijfelt u, begin dan met één wand: de wand achter het bed, achter de zetel of tegenover de deur. Zo ervaart u het effect van een motief zonder de ruimte te overladen. In onze winkel in Ninove kunt u behang bekijken en voelen, van effen en gestreept tot bloemen. Neem gerust de maten van uw wanden mee; dan berekenen we meteen hoeveel rollen u nodig hebt.",
         ],
       },
     ],
@@ -615,7 +615,7 @@ export const ARTICLES: Article[] = [
         heading: "Wat is het verschil?",
         paragraphs: [
           "Klassiek behang herhaalt een motief over de hele wand. Bij panoramisch behang en fotobehang is dat anders: het beeld loopt als één geheel over de wand, zonder herhaling. Panoramisch behang bestaat meestal uit een reeks genummerde banen die samen één ontwerp vormen, zoals een landschap of een botanisch tafereel. Fotobehang wordt vaak op maat gemaakt: het beeld wordt afgedrukt op de afmetingen van uw wand.",
-          "Bij Arte vindt u panoramische ontwerpen; bij Boråstapeter kunt u fotobehang op maat laten maken.",
+          "Bij ESTAhome en Origin Wallcoverings vindt u fotobehang in vaste afmetingen; bij Boråstapeter kunt u fotobehang op maat laten maken.",
         ],
       },
       {

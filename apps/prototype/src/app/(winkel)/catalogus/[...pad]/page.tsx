@@ -7,6 +7,7 @@ import { categoryImage, sfeerfotos } from "@/lib/catalog/imagery";
 import { categorieInhoud } from "@/lib/inhoud/categorie";
 import { toListingItem, VORM_VAN_CATEGORIE } from "@/lib/catalog/view";
 import { buildListing } from "@/lib/catalog/listing";
+import { filterProfiel } from "@/data/filterprofielen";
 import type { CategoryNode } from "@/lib/catalog/types";
 import { routes } from "@/lib/routes";
 import { normalize } from "@/lib/catalog/search";
@@ -90,6 +91,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Op-maatverhaal enkel waar Brunic maatwerk levert (stoffen, tapijten, vasttapijt); elders: kom naar de winkel.
   const maatwerk = maatwerkVoor(trail[0].id);
   const promo = <PromoBanner soort={maatwerk} />;
+  // Eén filtersysteem; de filters en hun volgorde komen uit het profiel van de hoofdcategorie.
+  const listing = buildListing(inCategory.map((p) => toListingItem(p)), sp, {}, VORM_VAN_CATEGORIE[node.id], filterProfiel(trail[0].id));
 
   if (display === "overview" && weergave !== "producten") {
     const banner = await categoryImage(node);
@@ -116,7 +119,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           subCards={subCards}
           listing={
             <Suspense>
-              <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp, {}, VORM_VAN_CATEGORIE[node.id])} promo={promo} />
+              <ProductListing data={listing} promo={promo} />
             </Suspense>
           }
           total={inCategory.length}
@@ -162,7 +165,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       <section aria-label={`Producten in ${node.name}`} className="mt-6">
         <Suspense>
-          <ProductListing data={buildListing(inCategory.map((p) => toListingItem(p)), sp, {}, VORM_VAN_CATEGORIE[node.id])} promo={promo} />
+          <ProductListing data={listing} promo={promo} />
         </Suspense>
       </section>
     </div>

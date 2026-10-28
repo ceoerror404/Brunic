@@ -4,18 +4,24 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
 import type { ListingData } from "@/lib/catalog/listing";
 import { activeFilterCount, labelFor, PAGE_SIZE, serializeListState, SORTS, type FacetGroup, type FacetLabelMap, type ListState, type SortKey } from "@/lib/catalog/filters";
+import { normalize } from "@/lib/catalog/search";
 import { Drawer } from "@/components/ui/drawer";
 import { Icon } from "@/components/ui/icon";
 import { ProductCard } from "./product-card";
 
 const NO_LABELS: FacetLabelMap = {};
 
+/** Vanaf zoveel waarden krijgt een vrije lijst een zoekveld en "Toon alle". */
+const LANGE_LIJST = 10;
+const EERST_ZICHTBAAR = 8;
+
 /**
- * Productlijst met filters, sortering en "meer laden". De toestand leeft in de URL
- * (deelbaar, terugknop werkt). Filteren, tellen en pagineren gebeurt op de server
- * (lib/catalog/listing.ts, B11): deze component krijgt enkel de getoonde producten en de
- * filtergroepen, en vraagt bij elke keuze een nieuwe serverrender via router.replace.
+ * Productlijst met filters, sortering en "meer laden" — dezelfde component voor elke lijst in
+ * de winkel. De toestand leeft in de URL (deelbaar, terugknop werkt). Filteren, tellen en
+ * pagineren gebeurt op de server (lib/catalog/listing.ts, B11): deze component krijgt enkel de
+ * getoonde producten en de filtergroepen, en vraagt bij elke keuze een nieuwe serverrender.
  * Keuzes verschijnen meteen (optimistisch); het raster dimt tot de nieuwe lijst er is.
+ * Desktop (filterknoppen) en mobiel (lade) gebruiken dezelfde groepen en dezelfde logica.
  */
 export function ProductListing({
   data,
@@ -35,7 +41,7 @@ export function ProductListing({
   const router = useRouter();
   const pathname = usePathname();
   const [state, setOptimisticState] = useOptimistic(data.state);
-  // Blijft true tot de serverrender van de nieuwe URL binnen is (router.replace in een transition).
+  // Blijft true tot de serverrender van de nieuwe URL binnen is (navigatie in een transition).
   const [pending, startTransition] = useTransition();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -47,7 +53,10 @@ export function ProductListing({
       const url = `${pathname}${serializeListState(merged, new URLSearchParams(window.location.search))}`;
       startTransition(() => {
         setOptimisticState(merged);
-        router.replace(url, { scroll: false });
+        // Een filter of sortering is een stap in de geschiedenis (de terugknop maakt hem ongedaan);
+        // "meer tonen" niet: dat is dezelfde lijst, verder gelezen.
+        if (resetPage) router.push(url, { scroll: false });
+        else router.replace(url, { scroll: false });
       });
     },
     [state, router, pathname, setOptimisticState],
@@ -63,6 +72,8 @@ export function ProductListing({
 
   const { items: shown, total, groups, hasOffers } = data;
   const activeCount = activeFilterCount(state);
+  const groupOf = (key: string) => groups.find((g) => g.def.key === key);
+  const chipLabel = (key: string, value: string) => groupOf(key)?.options.find((o) => o.value === value)?.label ?? labelFor(key, value, facetLabels);
 
   // Kleeft de filterbalk (desktop)? Dan schuift hij mee omhoog wanneer de header inklapt
   // (transform, geen top-wijziging: dat zou als layoutverschuiving tellen — B10).
@@ -114,7 +125,10 @@ export function ProductListing({
           <button type="button" onClick={() => setDrawerOpen(true)} className="btn btn-outline h-12 gap-3 px-4 text-[15px] sm:px-5" aria-haspopup="dialog">
             Alle filters
             {activeCount > 0 ? (
-              <span className="flex size-6 items-center justify-center rounded-full bg-ink text-xs text-white">{activeCount}</span>
+              <span className="flex size-6 items-center justify-center rounded-full bg-ink text-xs text-white">
+                {activeCount}
+                <span className="sr-only"> actief</span>
+              </span>
             ) : (
               <Icon name="filter" size={22} />
             )}
@@ -147,18 +161,22 @@ export function ProductListing({
         {activeCount > 0 && (
           <ul className="mt-3 flex flex-wrap items-center gap-2" role="list" aria-label="Actieve filters">
             {Object.entries(state.selection).flatMap(([key, vals]) =>
-              vals.map((v) => (
-                <li key={`${key}-${v}`}>
-                  <button
-                    type="button"
-                    onClick={() => toggleValue(key, v)}
-                    className="flex min-h-9 items-center gap-1.5 rounded-full bg-mist px-3 text-[13px] hover:bg-sand"
-                    aria-label={`Filter verwijderen: ${labelFor(key, v, facetLabels)}`}
-                  >
-                    {labelFor(key, v, facetLabels)} <Icon name="close" size={14} />
-                  </button>
-                </li>
-              )),
+              vals.map((v) => {
+                const naam = groupOf(key)?.def.label;
+                const label = chipLabel(key, v);
+                return (
+                  <li key={`${key}-${v}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleValue(key, v)}
+                      className="flex min-h-9 items-center gap-1.5 rounded-full bg-mist px-3 text-[13px] hover:bg-sand"
+                      aria-label={`Filter verwijderen: ${naam ? `${naam} ` : ""}${label}`}
+                    >
+                      {naam && <span className="text-ink-60">{naam}:</span>} {label} <Icon name="close" size={14} />
+                    </button>
+                  </li>
+                );
+              }),
             )}
             {state.offersOnly && (
               <li>
@@ -183,11 +201,18 @@ export function ProductListing({
             <div className="my-10 rounded-[var(--radius-tile)] bg-cloud px-6 py-14 text-center">
               <Icon name="search" size={36} className="mx-auto text-ink-60" />
               <p className="mt-4 text-lg font-medium">Geen producten gevonden</p>
-              <p className="mt-1 text-ink-80">{activeCount > 0 ? "Met deze filtercombinatie vinden we niets. Probeer minder filters." : "Hier staan nog geen producten."}</p>
+              <p className="mt-1 text-ink-80">
+                {activeCount > 0 ? "Met deze filtercombinatie vinden we niets. Verwijder een filter hierboven of wis ze allemaal." : "Hier staan nog geen producten."}
+              </p>
               {activeCount > 0 && (
-                <button type="button" onClick={clearAll} className="btn btn-primary mt-6">
-                  Alle filters wissen
-                </button>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  <button type="button" onClick={() => setDrawerOpen(true)} className="btn btn-outline">
+                    Filters aanpassen
+                  </button>
+                  <button type="button" onClick={clearAll} className="btn btn-primary">
+                    Alle filters wissen
+                  </button>
+                </div>
               )}
             </div>
           ))
@@ -252,17 +277,14 @@ export function ProductListing({
               <input type="checkbox" checked={state.offersOnly} onChange={(e) => update({ offersOnly: e.target.checked })} className="size-5 accent-[var(--color-ink)]" />
             </label>
           )}
-          {groups.map((g) => (
-            <details key={g.def.key} className="group border-b border-line" open={(state.selection[g.def.key] ?? []).length > 0 || g.def.key === groups[0]?.def.key}>
-              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between text-[15px] font-medium [&::-webkit-details-marker]:hidden">
-                <span>
-                  {g.def.label}
-                  {(state.selection[g.def.key] ?? []).length > 0 && <span className="ml-2 text-ink-60">({state.selection[g.def.key].length})</span>}
-                </span>
-                <Icon name="chevronDown" size={20} className="transition-transform group-open:rotate-180" />
-              </summary>
-              <FacetOptions group={g} selected={state.selection[g.def.key] ?? []} onToggle={toggleValue} />
-            </details>
+          {groups.map((g, i) => (
+            <DrawerGroup
+              key={g.def.key}
+              group={g}
+              selected={state.selection[g.def.key] ?? []}
+              defaultOpen={(state.selection[g.def.key] ?? []).length > 0 || i === 0}
+              onToggle={toggleValue}
+            />
           ))}
         </div>
       </Drawer>
@@ -279,29 +301,95 @@ function FragmentWithPromo({ children, promo }: { children: ReactNode; promo: Re
   );
 }
 
-function FacetOptions({ group, selected, onToggle }: { group: FacetGroup; selected: string[]; onToggle: (k: string, v: string) => void }) {
+/** Inklapbare filtergroep in de lade. Eigen open-toestand: de groep klapt niet dicht als de laatste keuze erin wegvalt. */
+function DrawerGroup({
+  group,
+  selected,
+  defaultOpen,
+  onToggle,
+}: {
+  group: FacetGroup;
+  selected: string[];
+  defaultOpen: boolean;
+  onToggle: (k: string, v: string) => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <ul role="list" className="space-y-1 pb-4">
-      {group.options.map((o) => {
-        const checked = selected.includes(o.value);
-        return (
-          <li key={o.value}>
-            <label className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 text-[14px] hover:bg-mist ${o.count === 0 && !checked ? "text-ink-40" : ""}`}>
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={o.count === 0 && !checked}
-                onChange={() => onToggle(group.def.key, o.value)}
-                className="size-[18px] shrink-0 accent-[var(--color-ink)]"
-              />
-              {o.swatch && <span className="size-5 shrink-0 rounded-full ring-1 ring-line-strong/40" style={{ background: o.swatch }} aria-hidden="true" />}
-              <span className="flex-1">{o.label}</span>
-              <span className="text-ink-60">{o.count}</span>
-            </label>
-          </li>
-        );
-      })}
-    </ul>
+    <details className="group border-b border-line" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between text-[15px] font-medium [&::-webkit-details-marker]:hidden">
+        <span>
+          {group.def.label}
+          {selected.length > 0 && <span className="ml-2 text-ink-60">({selected.length})</span>}
+        </span>
+        <Icon name="chevronDown" size={20} className="transition-transform group-open:rotate-180" />
+      </summary>
+      <FacetOptions group={group} selected={selected} onToggle={onToggle} />
+    </details>
+  );
+}
+
+/** De waarden van één filter — dezelfde weergave in de filterknop (desktop) en de lade. */
+function FacetOptions({ group, selected, onToggle }: { group: FacetGroup; selected: string[]; onToggle: (k: string, v: string) => void }) {
+  const [zoek, setZoek] = useState("");
+  const [alles, setAlles] = useState(false);
+  const zoekId = useId();
+  // Enkel vrije lijsten (merk, motief…): een vaste reeks (kleur, klassen) staat altijd volledig, anders valt bv. Grijs weg.
+  const lang = group.options.length > LANGE_LIJST && !group.def.volgorde && !group.def.buckets;
+  const q = normalize(zoek.trim());
+  const gevonden = q ? group.options.filter((o) => normalize(o.label).includes(q)) : group.options;
+  // Ingeklapt: de eerste waarden en alles wat gekozen is (een keuze verdwijnt nooit uit beeld).
+  const zichtbaar = lang && !alles && !q ? gevonden.filter((o, i) => i < EERST_ZICHTBAAR || selected.includes(o.value)) : gevonden;
+
+  return (
+    <div className="pb-4">
+      {lang && (
+        <div className="relative mb-2">
+          <label htmlFor={zoekId} className="sr-only">
+            Zoeken in {group.def.label.toLowerCase()}
+          </label>
+          <Icon name="search" size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-60" />
+          <input
+            id={zoekId}
+            type="search"
+            value={zoek}
+            onChange={(e) => setZoek(e.target.value)}
+            placeholder={`Zoek in ${group.def.label.toLowerCase()}`}
+            autoComplete="off"
+            className="h-11 w-full rounded-[var(--radius-field)] border border-line-strong bg-white pl-10 pr-3 text-[14px] hover:border-ink"
+          />
+        </div>
+      )}
+      <ul role="list" className="space-y-1">
+        {zichtbaar.map((o) => {
+          const checked = selected.includes(o.value);
+          return (
+            <li key={o.value}>
+              <label className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 text-[14px] hover:bg-mist ${o.count === 0 && !checked ? "text-ink-40" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={o.count === 0 && !checked}
+                  onChange={() => onToggle(group.def.key, o.value)}
+                  className="size-[18px] shrink-0 accent-[var(--color-ink)]"
+                />
+                {o.swatch && <span className="size-5 shrink-0 rounded-full ring-1 ring-line-strong/40" style={{ background: o.swatch }} aria-hidden="true" />}
+                <span className="flex-1">{o.label}</span>
+                <span className="text-ink-60">
+                  {o.count}
+                  <span className="sr-only"> {o.count === 1 ? "product" : "producten"}</span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {q && gevonden.length === 0 && <p className="px-2 py-2 text-[14px] text-ink-60">Niets gevonden voor “{zoek.trim()}”.</p>}
+      {lang && !q && gevonden.length > EERST_ZICHTBAAR && (
+        <button type="button" onClick={() => setAlles((a) => !a)} aria-expanded={alles} className="mt-1 min-h-11 px-2 text-[14px] font-medium underline underline-offset-2">
+          {alles ? "Toon minder" : `Toon alle ${group.options.length}`}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -319,23 +407,30 @@ function FacetDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const knop = useRef<HTMLButtonElement>(null);
   const id = useId();
+  // Sluiten met Escape of "Klaar": de focus gaat terug naar de filterknop (anders valt ze weg met het paneel).
+  const sluit = useCallback(() => {
+    setOpen(false);
+    knop.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && sluit();
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, sluit]);
 
   return (
     <div ref={ref} className="relative">
       <button
+        ref={knop}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -345,11 +440,21 @@ function FacetDropdown({
         }`}
       >
         {group.def.label}
-        {selected.length > 0 && <span className="flex size-5 items-center justify-center rounded-full bg-ink text-[11px] text-white">{selected.length}</span>}
+        {selected.length > 0 && (
+          <span className="flex size-5 items-center justify-center rounded-full bg-ink text-[11px] text-white">
+            {selected.length}
+            <span className="sr-only"> gekozen</span>
+          </span>
+        )}
         <Icon name="chevronDown" size={20} className={open ? "rotate-180" : ""} />
       </button>
       {open && (
-        <div id={id} className="absolute left-0 top-[calc(100%+6px)] z-40 w-[300px] rounded-[var(--radius-tile)] bg-white p-3 shadow-[var(--shadow-pop)] ring-1 ring-line">
+        <div
+          id={id}
+          role="group"
+          aria-label={group.def.label}
+          className="absolute left-0 top-[calc(100%+6px)] z-40 w-[300px] rounded-[var(--radius-tile)] bg-white p-3 shadow-[var(--shadow-pop)] ring-1 ring-line"
+        >
           <div className="max-h-[320px] overflow-y-auto">
             <FacetOptions group={group} selected={selected} onToggle={onToggle} />
           </div>
@@ -357,7 +462,7 @@ function FacetDropdown({
             <button type="button" onClick={() => onClear(group.def.key)} disabled={!selected.length} className="px-2 text-[13px] font-medium underline underline-offset-2 disabled:text-ink-40 disabled:no-underline">
               Wissen
             </button>
-            <button type="button" onClick={() => setOpen(false)} className="btn btn-primary btn-sm">
+            <button type="button" onClick={sluit} className="btn btn-primary btn-sm">
               Klaar
             </button>
           </div>

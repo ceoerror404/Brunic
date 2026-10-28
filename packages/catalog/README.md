@@ -32,9 +32,9 @@ Alle definities filterable via Search & Discovery; namespace-voorstel `brunic`.
 | `poolhoogte_mm` + `poolklasse` (hoog/laag) | number_integer + text | product | tapijten, vasttapijt |
 | `materiaal` | text (lijst) | product | alle |
 | `kleurfamilie` | text, 1 waarde (keuzelijst) | product + **variant** | alle — de site telt product- én variantwaarden voor de kleurfilter (variant = kleur van die kleurvariant) |
-| `accentkleuren` | list.single_line_text_field (keuzelijst = die van kleurfamilie, max. 2) | **variant** | tapijten (✅ 22/10) — samen met de variant-`kleurfamilie` het kleurbolletje op de site |
-| `motief` | list.single_line_text_field (keuzelijst, max. 2) | product | tapijten (✅ 22/10: 172 vloerkleden, `set-tapijt-tags.mjs`); behang na opschoning van zijn motieven |
-| `stijl` | list.single_line_text_field (keuzelijst, max. 2) | product | idem; `stijl_design` (1 waarde) blijft voor de gordijnstoffen |
+| `accentkleuren` | list.single_line_text_field (keuzelijst = die van kleurfamilie, max. 2) | **variant** | tapijten (✅ 22/10); gordijnstoffen (✅ 28/10) — samen met de variant-`kleurfamilie` het kleurbolletje op de site |
+| `motief` | list.single_line_text_field (keuzelijst, max. 2) | product | tapijten (✅ 22/10: 172 vloerkleden, `set-tapijt-tags.mjs`); gordijnstoffen (✅ 28/10: 576 stoffen, zelfde keuzelijst, `export-tagreview.mjs` + `set-tapijt-tags.mjs --type Gordijnstof,Passement`); behang na opschoning van zijn motieven |
+| `stijl` | list.single_line_text_field (keuzelijst, max. 2) | product | idem; `stijl_design` (1 waarde) blijft ongemoeid |
 | `stijl_design` | text (lijst) | product | tapijten, behang, stoffen |
 | `patroon` | text | product | behang, stoffen (effen/bloemen/streep/tekening — draagt de subcollecties) |
 | `vorm` | text | product | tapijten (rond/vierkant/speciaal — draagt de vorm-subcollecties) |

@@ -12,6 +12,7 @@ import { SHOPIFY_HOOFDCOLLECTIE, SHOPIFY_NEGEER, SHOPIFY_NIEUW_COLLECTIE, SHOPIF
 import type { Category, CategoryId, Price, Product, ProductImage, ProductOption, QuantityRule, SalesUnit, Spec, Variant } from "./types";
 import { eenProductPerOntwerp } from "./ontwerpen";
 import { kleurStaal } from "./filters";
+import { facettenUitSpecs, maatKlassen, normaliseerFacetten, rolbreedtes } from "./facet-normalisatie";
 
 export const SNAPSHOT_PAD = path.join(process.cwd(), ".data", "shopify-catalogus.json");
 
@@ -345,17 +346,24 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   ];
   const dimensions = alleSpecs.filter((s) => IS_MAAT.test(s.label));
 
-  const facets: Record<string, string[]> = {
+  // Filterwaarden (lib/catalog/facet-normalisatie.ts): eerst wat de leveranciersspecificaties
+  // opleveren, daarover de metafields — die zijn nagekeken en winnen dus.
+  const breedteOptie = opties.find((o) => o !== kleurOptie && /breedte/i.test(o.name));
+  const facets = normaliseerFacetten({
+    ...facettenUitSpecs(alleSpecs),
+    // Geen filter (zie FACETS), wel nodig om ontwerpen samen te voegen (ontwerpen.ts).
     eenheid: [EENHEID_LABEL[unit]],
-    ...(p.vendor ? { merk: [p.vendor] } : {}),
-    ...(p.productType ? { type: [p.productType] } : {}),
-    ...(p.materiaal ? { materiaal: p.materiaal.split(/[,/]/).map((s) => s.trim()).filter(Boolean) } : {}),
+    merk: [p.vendor],
+    type: [p.productType],
+    ...(p.materiaal ? { materiaal: p.materiaal.split(/[,/]/) } : {}),
     // Kleur van het product én van elke kleurvariant: een tapijt in 10 kleuren is onder elk ervan te vinden.
-    kleur: [...new Set([...lijstUit(p.kleurfamilie), ...p.variants.flatMap((v) => lijstUit(v.kleurfamilie))])],
+    kleur: [...lijstUit(p.kleurfamilie), ...p.variants.flatMap((v) => lijstUit(v.kleurfamilie))],
     ...(motief.length ? { motief } : {}),
     ...(stijl.length ? { stijl } : {}),
-    ...(vormen.length ? { vorm: vormen } : {}),
-  };
+    vorm: vormen,
+    maat: maatKlassen(maatOptie?.optionValues.map((v) => v.name) ?? []),
+    rolbreedte: rolbreedtes(breedteOptie?.optionValues.map((v) => v.name) ?? []),
+  });
 
   const heeftKorting = variants.some((v) => v.price?.compareAt);
   return {
