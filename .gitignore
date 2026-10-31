@@ -18,6 +18,12 @@ dist/
 __pycache__/
 *.pyc
 
+# Audit-screenshots (webshop-qa-audit): lokaal bewijs, geen binaries in git
+docs/audits/*/screenshots/
+
+# Lokale Claude-weergave van .agents/skills (junction, aangemaakt door agent-setup.ps1)
+.claude/skills/
+
 # OS/editor
 .DS_Store
 Thumbs.db
