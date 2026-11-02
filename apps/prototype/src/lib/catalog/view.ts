@@ -2,8 +2,8 @@
  * Compacte weergavemodellen voor kaarten en lijsten. De server mapt een volledig
  * Product naar deze vorm; zo krijgen client-componenten enkel wat ze tonen/filteren.
  */
-import type { Availability, ImageRef, Price, Product, ProductBadge, ProductImage, Variant } from "./types";
-import { fotoTrede, hasPriceRange, imagesForVariant, isStaal, lowestPrice, standaardVariant } from "./product";
+import type { Availability, ImageRef, Price, Product, ProductBadge, Variant } from "./types";
+import { fotoTrede, hasPriceRange, hoverVoor, imagesForVariant, isStaal, kleurOptie, lowestPrice, standaardVariant } from "./product";
 import { derivedFacetValues, variantWaarden, type VariantWaarden } from "./filters";
 import { ancestry, type CategoryTree } from "./tree";
 import { compactSrc } from "./cdn";
@@ -75,25 +75,6 @@ export type ListingItem = CardProduct & {
 
 const AVAIL_RANK: Availability[] = ["op-voorraad", "beperkt", "op-bestelling", "uitverkocht"];
 
-const kleurOptie = (p: Product) => p.options.find((o) => /kleur|color|colour/i.test(o.name));
-
-/**
- * Het hoverbeeld van een kaart: een foto in dezelfde kleur, liefst een sfeerfoto. Een foto zonder kleur
- * mag enkel bij een product met één kleur: bij meer kleuren is niet zeker welke kleur erop staat.
- * Anders geen hoverbeeld: dan blijft de foto gewoon staan.
- */
-function hoverVoor(p: Product, kleur: string | undefined, kaart: ProductImage | undefined): ProductImage | undefined {
-  const nietKaart = (i: ProductImage) => i.src !== kaart?.src;
-  const eigen = (i: ProductImage) => kleur !== undefined && i.optionValue === kleur;
-  const eenKleur = (kleurOptie(p)?.values.length ?? 0) <= 1;
-  return (
-    p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && eigen(i)) ??
-    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && !i.optionValue) : undefined) ??
-    p.images.find((i) => nietKaart(i) && i.soort !== "rol" && eigen(i)) ??
-    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort !== "rol") : undefined)
-  );
-}
-
 /** De variant die een kleur vertegenwoordigt: beschikbaar en geen staal, als dat kan. */
 function variantVanKleur(varianten: Variant[]): Variant | undefined {
   return varianten.find((v) => v.availability !== "uitverkocht" && !isStaal(v)) ?? varianten.find((v) => v.availability !== "uitverkocht") ?? varianten[0];
@@ -148,7 +129,13 @@ export function toCard(p: Product): CardProduct {
     fromPrice: hasPriceRange(p),
     availability: best?.availability ?? "op-bestelling",
     swatchTotal: color?.values.length ?? 0,
-    swatches: color ? kleurKaarten(p).slice(0, 4).map((k) => k.staal) : [],
+    // De kleur van de kaart altijd vooraan: de kaart toont maar vier stalen.
+    swatches: color
+      ? kleurKaarten(p)
+          .sort((a, b) => Number(b.staal.value === standaard?.options[color.name]) - Number(a.staal.value === standaard?.options[color.name]))
+          .slice(0, 4)
+          .map((k) => k.staal)
+      : [],
   };
 }
 

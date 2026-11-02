@@ -53,7 +53,7 @@ Filteren gebeurt **op de server, op de volledige catalogus** (niet op de geladen
 
 Beeld, hoverbeeld, prijs, stalen en link van een kaart komen uit één variant, de **toonvariant**. Zo kunnen ze niet uiteenlopen.
 
-- **Zonder Kleur-, Maat-, Vorm- of Prijsfilter**: de standaardvariant (`standaardVariant` in `product.ts`), de eerste beschikbare variant, geen staal, met het beste eerste beeld. De productpagina opent op dezelfde variant, dus kaart en pagina tonen hetzelfde beeld. De prijs is de vanaf-prijs van het hele product.
+- **Zonder Kleur-, Maat-, Vorm- of Prijsfilter**: de standaardvariant (`standaardVariant` in `product.ts`), de eerste beschikbare variant, geen staal, met het beste eerste beeld, en bij een gelijk beeld de eerste met een hoverbeeld. De productpagina opent op dezelfde variant, dus kaart en pagina tonen hetzelfde beeld. De prijs is de vanaf-prijs van het hele product.
 - **Met zo'n filter** (`metToonvariant` in `listing.ts`): de goedkoopste variant die aan alle gekozen filters voldoet, in de kleur met het beste beeld. De prijs komt van die kleur, "vanaf" enkel als die kleur meerdere prijzen heeft binnen de keuze. De link opent op die variant. Sorteren op prijs volgt de prijs op de kaart. De gekozen kleuren staan vooraan bij de stalen, want de kaart toont er maar vier.
 - **Lijst over één vorm** (Rond, Speciale vormen): de kaart toont de foto in die vorm en linkt naar een maat in die vorm.
 
@@ -61,7 +61,7 @@ Beeld, hoverbeeld, prijs, stalen en link van een kaart komen uit één variant, 
 
 **Kleur van een foto**: de variantfoto, anders de alt-tekst (`… – kleur 110`, of de kleur als laatste deel: `Easytex Westbury – 162L`). Een optie "Breedte" is nooit een kleur.
 
-**Hoverbeeld**: enkel in de kleur van de kaart, liefst een sfeerfoto. Een foto zonder kleur enkel bij een product met één kleur. Anders geen hoverbeeld: liever de productfoto laten staan dan een andere kleur tonen. Die producten krijgen er een zodra hun sfeerfoto in Shopify aan een kleur hangt.
+**Hoverbeeld**: enkel in de kleur van de kaart, liefst een sfeerfoto. Een foto zonder kleur enkel bij een product met één kleur. Heeft geen enkele kleur een hoverbeeld, dan blijft de foto staan: liever dat dan een andere kleur tonen. Hangt de sfeerfoto aan geen kleur, dan lost een koppeling in Shopify dat op.
 
 **Voorraad**: de site belooft geen voorraad, want er is geen ERP gekoppeld en Shopify volgt ze niet. De kaart zegt "Online te bestellen", de productpagina, de optielade en de winkelmand zeggen niets. Ook de structured data laat `availability` weg (niet verplicht voor Google). Enkel "Tijdelijk uitverkocht" blijft, want dan kan bestellen echt niet. Komt er een ERP-koppeling, dan kan dit terug (TODO B01).
 

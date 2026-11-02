@@ -97,9 +97,10 @@ function metToonvariant(item: ListingItem, selection: Selection, vormLijst: stri
   const vorm = vormBeelden(toon);
   // In een kleurfilter nooit de vormfoto van een andere kleur.
   const vormFoto = (toon.kleur !== undefined ? vorm?.perKleur[toon.kleur] : undefined) ?? (selection.kleur?.length ? undefined : vorm?.image);
-  // De gekozen kleuren vooraan: de kaart toont er maar vier.
+  // De kleur van de kaart en de gekozen kleuren vooraan: de kaart toont er maar vier.
   const gekozen = new Set(kandidaten.map((v) => v.kleur));
-  const stalen = [...item.kleuren.filter((x) => gekozen.has(x.staal.value)), ...item.kleuren.filter((x) => !gekozen.has(x.staal.value))];
+  const plaats = (waarde: string) => (waarde === toon.kleur ? 0 : gekozen.has(waarde) ? 1 : 2);
+  const stalen = [...item.kleuren].sort((a, b) => plaats(a.staal.value) - plaats(b.staal.value));
   const eerste = (waarde: string) => keuze.find((v) => v.kleur === waarde) ?? kandidaten.find((v) => v.kleur === waarde);
 
   return {

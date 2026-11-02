@@ -86,26 +86,52 @@ export function imagesForVariant(p: Product, v: Variant | undefined): ProductIma
   return [...list].sort((a, b) => fotoTrede(a) - fotoTrede(b) || vormRang(a) - vormRang(b));
 }
 
+/** De optie die de kleur draagt. */
+export const kleurOptie = (p: Product) => p.options.find((o) => /kleur|color|colour/i.test(o.name));
+
+/**
+ * Het hoverbeeld van een kaart: een foto in dezelfde kleur, liefst een sfeerfoto. Een foto zonder kleur
+ * mag enkel bij een product met één kleur: bij meer kleuren is niet zeker welke kleur erop staat.
+ * Anders geen hoverbeeld: dan blijft de foto gewoon staan.
+ */
+export function hoverVoor(p: Product, kleur: string | undefined, kaart: ProductImage | undefined): ProductImage | undefined {
+  const nietKaart = (i: ProductImage) => i.src !== kaart?.src;
+  const eigen = (i: ProductImage) => kleur !== undefined && i.optionValue === kleur;
+  const eenKleur = (kleurOptie(p)?.values.length ?? 0) <= 1;
+  return (
+    p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && eigen(i)) ??
+    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && !i.optionValue) : undefined) ??
+    p.images.find((i) => nietKaart(i) && i.soort !== "rol" && eigen(i)) ??
+    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort !== "rol") : undefined)
+  );
+}
+
+const STANDAARD = new WeakMap<Product, Variant>();
+
 /**
  * De variant waarop het product standaard opent, en die de kaart toont: de eerste beschikbare
- * variant (geen staal) met het beste eerste beeld. Kaart en productpagina gebruiken allebei
- * deze variant, zo tonen ze hetzelfde beeld.
+ * variant (geen staal) met het beste eerste beeld, en bij een gelijk beeld de eerste met een
+ * hoverbeeld. Kaart en productpagina gebruiken allebei deze variant, zo tonen ze hetzelfde beeld.
  */
 export function standaardVariant(p: Product): Variant {
+  const bekend = STANDAARD.get(p);
+  if (bekend) return bekend;
   const beschikbaar = p.variants.filter((v) => v.availability !== "uitverkocht");
   const zonderStaal = beschikbaar.filter((v) => !isStaal(v));
   const keuze = zonderStaal.length ? zonderStaal : beschikbaar.length ? beschikbaar : p.variants;
+  const ko = kleurOptie(p);
   let beste = keuze[0];
-  let besteTrede = Infinity;
+  let besteScore = Infinity;
   for (const v of keuze) {
     const eerste = imagesForVariant(p, v)[0];
-    const trede = eerste ? fotoTrede(eerste) : 3;
-    if (trede < besteTrede) {
+    const score = (eerste ? fotoTrede(eerste) : 3) * 10 + (hoverVoor(p, ko ? v.options[ko.name] : undefined, eerste) ? 0 : 1);
+    if (score < besteScore) {
       beste = v;
-      besteTrede = trede;
+      besteScore = score;
     }
-    if (besteTrede === 0) break;
+    if (besteScore === 0) break;
   }
+  if (beste) STANDAARD.set(p, beste);
   return beste;
 }
 

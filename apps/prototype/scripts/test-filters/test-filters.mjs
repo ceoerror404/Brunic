@@ -396,6 +396,21 @@ check("hover: enkel een foto in de kleur van de kaart", () => {
     assert.notEqual(k.hoverImage.src, k.image?.src, `${p.slug}: hover = kaartbeeld`);
   }
 });
+check("de kaart kiest een kleur met een hoverbeeld als dat kan, zonder een slechter eerste beeld", () => {
+  for (const p of products) {
+    const k = toListingItem(p);
+    if (k.hoverImage) continue;
+    const ko = p.options.find((o) => /kleur|color|colour/i.test(o.name));
+    if (!ko || ko.values.length < 2) continue;
+    const trede = fotoTrede(imagesForVariant(p, standaardVariant(p))[0] ?? { soort: "rol" });
+    for (const v of p.variants.filter((x) => x.availability !== "uitverkocht" && !Object.values(x.options).some((w) => /staal/i.test(w)))) {
+      const eerste = imagesForVariant(p, v)[0];
+      if (!eerste || fotoTrede(eerste) > trede) continue;
+      const anderBeeld = p.images.some((i) => i.src !== eerste.src && i.soort !== "rol" && i.optionValue === v.options[ko.name]);
+      assert.ok(!anderBeeld, `${p.slug}: geen hover, terwijl kleur ${v.options[ko.name]} er een heeft`);
+    }
+  }
+});
 check("Beauflor: _rsh_ is een sfeerfoto, _psh een productfoto", () => {
   const beelden = products.flatMap((p) => p.images);
   const rsh = beelden.filter((i) => /_rsh[_.]/i.test(i.src.split("?")[0]));
