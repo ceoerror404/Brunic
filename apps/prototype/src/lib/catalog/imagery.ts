@@ -7,7 +7,7 @@ export const IS_SFEER = /\s[–-]\s*sfeerfoto/i;
 
 /** De eerste sfeerfoto (kamerbeeld van de leverancier) van een product, anders undefined. */
 export function sfeerfoto(p: Product): ImageRef | undefined {
-  return p.images.find((i) => IS_SFEER.test(i.alt));
+  return p.images.find((i) => i.soort === "sfeer" || IS_SFEER.test(i.alt));
 }
 
 /**

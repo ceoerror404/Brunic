@@ -50,6 +50,6 @@ export const SHOPIFY_NEGEER = new Set(["frontpage", "in-de-kijker", SHOPIFY_NIEU
  * (lib/catalog/ontwerpen.ts). Ze blijven apart, met de collectie achter de naam.
  */
 export const ZELFDE_NAAM_ANDER_ONTWERP: { merk: string; titel: string }[] = [
-  { merk: "Desso", titel: "Fuse B755" }, // collecties Fuse Landscape en Fuse Create
+  { merk: "Tarkett", titel: "Fuse B755" }, // Desso, collecties Fuse Landscape en Fuse Create
 ];
 

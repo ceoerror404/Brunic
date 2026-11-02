@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CardProduct } from "@/lib/catalog/view";
-import { AVAILABILITY_LABEL } from "@/lib/catalog/product";
 import { routes } from "@/lib/routes";
 import { cdnWidth } from "@/lib/catalog/cdn";
 import { ImageSlot } from "@/components/ui/image-slot";
@@ -15,7 +14,7 @@ const BADGE_LABEL = { nieuw: "Nieuw", aanbieding: "Aanbieding", "op-maat": "Op m
 /**
  * Productkaart volgens de referentie: afgeronde kaart (hover-rand), beeld 4:3 met
  * label linksboven en hartje rechtsboven, merkregel, titel (2 regels), prijs,
- * voorraad, kleurstalen.
+ * bestelregel, kleurstalen. Geen voorraadbelofte: Shopify volgt geen voorraad.
  */
 export function ProductCard({ product, priority = false, tone = 0 }: { product: CardProduct; priority?: boolean; tone?: number }) {
   const [hover, setHover] = useState(false);
@@ -54,23 +53,13 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
         </p>
         <h3 className="line-clamp-2 min-h-[2.5rem] text-[14px] font-medium leading-5">
           {/* De hele kaart is klikbaar via de stretched link op de titel. */}
-          <Link href={routes.product(product.slug, chosen?.variantId)} className="after:absolute after:inset-0 after:rounded-[var(--radius-pill)] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ink">
+          <Link href={routes.product(product.slug, chosen?.variantId ?? product.variantId)} className="after:absolute after:inset-0 after:rounded-[var(--radius-pill)] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ink">
             {product.title}
           </Link>
         </h3>
         <Price card={product} className="mt-0.5" />
-        <p
-          className={`text-xs ${
-            product.pricing === "on-request"
-              ? "text-ink-60"
-              : product.availability === "op-voorraad"
-                ? "text-success"
-                : product.availability === "uitverkocht"
-                  ? "text-brand-dark"
-                  : "text-warning"
-          }`}
-        >
-          {product.pricing === "on-request" ? "Advies en offerte in de winkel" : AVAILABILITY_LABEL[product.availability]}
+        <p className={`text-xs ${product.pricing === "fixed" && product.availability === "uitverkocht" ? "text-brand-dark" : "text-ink-60"}`}>
+          {product.pricing === "on-request" ? "Advies en offerte in de winkel" : product.availability === "uitverkocht" ? "Tijdelijk uitverkocht" : "Online te bestellen"}
         </p>
         {product.swatchTotal > 1 && (
           // Boven de kaartlink (z-10): een staal kiezen wisselt het beeld en de link naar die kleur.

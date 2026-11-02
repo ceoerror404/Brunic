@@ -14,6 +14,7 @@
  *    collectie achter de naam: "Fuse B755 – Fuse Create".
  */
 import { ZELFDE_NAAM_ANDER_ONTWERP } from "@/data/shopify-bron";
+import { fotoRang } from "./product";
 import { normalize } from "./search";
 import type { Category, CategoryId, Product } from "./types";
 
@@ -60,7 +61,8 @@ function voegSamen(hoofd: Product, rest: Product[]): Product {
   return {
     ...metDubbels(hoofd, rest),
     line: lijnen.length ? lijnen.join(" / ") : undefined,
-    images,
+    // Elk deel is al gesorteerd, de som nog niet: anders staat de rolfoto van deel 1 voor de productfoto van deel 2.
+    images: [...images].sort((a, b) => fotoRang(a) - fotoRang(b)),
     options,
     variants: alle.flatMap((p) => p.variants),
     description: hoofd.description || rest.find((p) => p.description)?.description || "",

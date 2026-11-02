@@ -8,11 +8,13 @@ import path from "node:path";
 import { CATEGORIES } from "@/data/categories";
 import { CATEGORIE_TEKST } from "@/data/categorie-teksten";
 import { SUBCATEGORIE_BEELD } from "@/data/beelden";
+import { MERK_ONDER } from "@/data/merken";
 import { SHOPIFY_HOOFDCOLLECTIE, SHOPIFY_NEGEER, SHOPIFY_NIEUW_COLLECTIE, SHOPIFY_SUB_EXTRA, SHOPIFY_SUB_VOORVOEGSEL } from "@/data/shopify-bron";
-import type { Category, CategoryId, Price, Product, ProductImage, ProductOption, QuantityRule, SalesUnit, Spec, Variant } from "./types";
+import type { Category, CategoryId, FotoSoort, Price, Product, ProductImage, ProductOption, QuantityRule, SalesUnit, Spec, Variant } from "./types";
 import { eenProductPerOntwerp } from "./ontwerpen";
 import { kleurStaal } from "./filters";
 import { facettenUitSpecs, maatKlassen, normaliseerFacetten, rolbreedtes } from "./facet-normalisatie";
+import { FOTO_RANG } from "./product";
 
 export const SNAPSHOT_PAD = path.join(process.cwd(), ".data", "shopify-catalogus.json");
 
@@ -108,18 +110,19 @@ const IS_SFEER = /\s[–-]\s*sfeerfoto/i;
 const IS_ROL = /\s[–-]\s*rolfoto/i;
 
 /**
- * Volgorde van de foto's bij tapijten: eerst de productfoto (het hele tapijt, geen interieur),
- * dan overige foto's, details en als laatste de sfeerfoto's — tenzij er geen productfoto is.
- * Het label staat in de alt-tekst ("… – productfoto – kleur …").
+ * Soort foto: het label in de alt-tekst ("… – productfoto – kleur …"). Beauflor heeft geen labels,
+ * maar zet het in de bestandsnaam: `_rsh_` = interieur, `_psh` = product.
  */
-function fotoRang(alt: string): number {
-  if (IS_ROL.test(alt)) return 9;
-  if (/\s[–-]\s*(productfoto|kleurstaal)/i.test(alt)) return 0;
-  if (IS_SFEER.test(alt)) return 3;
-  if (/\s[–-]\s*(detailfoto|hoekfoto)/i.test(alt)) return 2;
-  return 1;
+function fotoSoort(alt: string, url: string): FotoSoort {
+  if (IS_ROL.test(alt)) return "rol";
+  if (/\s[–-]\s*(productfoto|kleurstaal)/i.test(alt)) return "product";
+  if (IS_SFEER.test(alt)) return "sfeer";
+  if (/\s[–-]\s*(detailfoto|hoekfoto)/i.test(alt)) return "detail";
+  const naam = zonderQuery(url).split("/").pop() ?? "";
+  if (/_rsh[_.]/i.test(naam)) return "sfeer";
+  if (/_psh[_.]/i.test(naam)) return "product";
+  return "overig";
 }
-const IS_TAPIJT = (collections: string[]) => collections.some((h) => h === "tapijten" || h.startsWith("tapijten-"));
 
 /**
  * Vorm uit een maat: "Rond Ø 140 cm" → Rond, "Organisch 170 × 235 cm" en "Pebble 120 × 170 cm"
@@ -237,7 +240,8 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
 
   const unit = EENHEID[(p.eenheid ?? "").trim().toLowerCase()] ?? "stuk";
   const opties = p.options.filter((o) => !IS_TITEL_OPTIE(o));
-  const kleurOptie = opties.find((o) => /kleur|color|colour/i.test(o.name)) ?? (opties.length === 1 ? opties[0] : undefined);
+  // De enige optie telt als kleur (bv. "Dessin"), behalve een breedte: die zit op geen enkele foto.
+  const kleurOptie = opties.find((o) => /kleur|color|colour/i.test(o.name)) ?? (opties.length === 1 && !/breedte/i.test(opties[0].name) ? opties[0] : undefined);
 
   // Variantfoto koppelen aan de kleurwaarde → galerij en stalen wisselen mee.
   const beeldBijWaarde = new Map<string, string>();
@@ -247,16 +251,18 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   }
   const waardeBijBeeld = new Map([...beeldBijWaarde.entries()].map(([w, url]) => [zonderQuery(url), w]));
 
-  // Kleur per beeld: de variantfoto, anders de alt-tekst van de import ("… – detailfoto – kleur 110").
+  // Kleur per beeld: de variantfoto, anders de alt-tekst: "… – detailfoto – kleur 110", of de kleur als
+  // laatste deel zoals bij Beauflor ("Beauflor Easytex Westbury – 162L").
   const kleurwaarden = new Set(kleurOptie?.optionValues.map((v) => v.name) ?? []);
   const images: ProductImage[] = p.images.map((img) => {
-    const uitAlt = img.altText?.match(/\s[–-]\s*kleur\s+(.+)$/i)?.[1]?.trim();
+    const alt = img.altText ?? "";
+    const uitAlt = alt.match(/\s[–-]\s*kleur\s+(.+)$/i)?.[1]?.trim() ?? alt.split(/\s[–-]\s/).at(-1)?.trim();
     const w = waardeBijBeeld.get(zonderQuery(img.url)) ?? (uitAlt && kleurwaarden.has(uitAlt) ? uitAlt : undefined);
-    return { src: img.url, alt: img.altText || p.title, ...(w ? { optionValue: w } : {}) };
+    return { src: img.url, alt: img.altText || p.title, soort: fotoSoort(alt, img.url), ...(w ? { optionValue: w } : {}) };
   });
   // Variantfoto's die niet bij de productfoto's staan, toch toevoegen.
   for (const [w, url] of beeldBijWaarde) {
-    if (!images.some((i) => zonderQuery(i.src) === zonderQuery(url))) images.push({ src: url, alt: `${p.title} — ${w}`, optionValue: w });
+    if (!images.some((i) => zonderQuery(i.src) === zonderQuery(url))) images.push({ src: url, alt: `${p.title} — ${w}`, soort: fotoSoort("", url), optionValue: w });
   }
   // Vorm per variant (uit de maat) en per foto: een variantfoto die enkel bij ronde (of organische,
   // of loper-)maten hoort, toont het tapijt in die vorm. Ragolle gebruikt voor ronde maten de
@@ -280,15 +286,11 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   }
   const vormen = [...new Set(p.variants.map(vormVan).filter((v): v is string => Boolean(v)))];
 
-  if (IS_TAPIJT(p.collections)) {
-    // Bestaat het tapijt enkel in één bijzondere vorm (bv. enkel rond), dan komt die foto eerst.
-    const eigenVorm = vormen.length === 1 && BIJZONDERE_VORM.has(vormen[0]) ? vormen[0] : undefined;
-    const rang = (i: ProductImage) => fotoRang(i.alt) + (i.vorm && i.vorm !== eigenVorm ? 0.5 : 0);
-    images.sort((a, b) => rang(a) - rang(b));
-  } else {
-    // De rolfoto nooit vooraan: niet als kaartbeeld, niet als eerste beeld van een kleur, niet als staal.
-    images.sort((a, b) => Number(IS_ROL.test(a.alt)) - Number(IS_ROL.test(b.alt)));
-  }
+  // Overal dezelfde volgorde: productfoto, overige foto's, details, sfeerfoto's, en de rolfoto als laatste.
+  // Bestaat het tapijt enkel in één bijzondere vorm (bv. enkel rond), dan komt die foto eerst.
+  const eigenVorm = vormen.length === 1 && BIJZONDERE_VORM.has(vormen[0]) ? vormen[0] : undefined;
+  const rang = (i: ProductImage) => FOTO_RANG[i.soort ?? "overig"] + (i.vorm && i.vorm !== eigenVorm ? 0.5 : 0);
+  images.sort((a, b) => rang(a) - rang(b));
 
   // Kleurbolletje uit de kleurfamilie (+ accenten) van elke kleurvariant. Enkel als elke kleur van
   // het product er een heeft en ze allemaal verschillen; anders blijft de foto het staal (twee
@@ -322,14 +324,24 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
     const compare = v.compareAtPrice ? Number(v.compareAtPrice.amount) : 0;
     const price: Price | null =
       !opAanvraag && amount > 0 ? { amount: { amount, currency: "EUR" }, unit, ...(compare > amount ? { compareAt: { amount: compare, currency: "EUR" } } : {}) } : null;
+    const kleurfamilies = normaliseerFacetten({ kleur: lijstUit(v.kleurfamilie) }).kleur;
+    const maat = maatOptie ? v.selectedOptions.find((o) => o.name === maatOptie.name)?.value : undefined;
+    const maatKlasse = maat ? maatKlassen([maat])[0] : undefined;
+    const vorm = vormVan(v);
     return {
       id: kortId(v.id),
       sku: v.sku || kortId(v.id),
       options: Object.fromEntries(v.selectedOptions.filter((o) => o.name !== "Title").map((o) => [o.name, o.value])),
       price,
       availability: v.availableForSale ? "op-voorraad" : "uitverkocht",
+      ...(kleurfamilies ? { kleurfamilies } : {}),
+      ...(maatKlasse ? { maatKlasse } : {}),
+      ...(vorm ? { vorm } : {}),
     };
   });
+
+  // Desso is een merk van Tarkett: overal Tarkett, maar zoeken op "Desso" blijft werken.
+  const merk = MERK_ONDER[p.vendor] ?? p.vendor;
 
   const alleSpecs = specsUit(p.specificaties);
   const motief = lijstUit(p.motief);
@@ -337,7 +349,7 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   // Behang heeft Motief/Stijl al in de leveranciersspecificaties: niet dubbel tonen.
   const alInSpecs = (label: string) => alleSpecs.some((s) => s.label === label);
   const specs: Spec[] = [
-    ...(p.vendor ? [{ label: "Merk", value: p.vendor }] : []),
+    ...(merk ? [{ label: "Merk", value: merk }] : []),
     ...(p.materiaal ? [{ label: "Materiaal", value: p.materiaal }] : []),
     ...(motief.length && !alInSpecs("Motief") ? [{ label: "Motief", value: motief.join(", ") }] : []),
     ...(stijl.length && !alInSpecs("Stijl") ? [{ label: "Stijl", value: stijl.join(", ") }] : []),
@@ -353,7 +365,7 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
     ...facettenUitSpecs(alleSpecs),
     // Geen filter (zie FACETS), wel nodig om ontwerpen samen te voegen (ontwerpen.ts).
     eenheid: [EENHEID_LABEL[unit]],
-    merk: [p.vendor],
+    merk: [merk],
     type: [p.productType],
     ...(p.materiaal ? { materiaal: p.materiaal.split(/[,/]/) } : {}),
     // Kleur van het product én van elke kleurvariant: een tapijt in 10 kleuren is onder elk ervan te vinden.
@@ -370,7 +382,8 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
     id: kortId(p.id),
     slug: p.handle,
     title: p.title,
-    brand: p.vendor || undefined,
+    brand: merk || undefined,
+    ...(merk !== p.vendor ? { merkBron: p.vendor } : {}),
     line: p.collectie || undefined,
     categoryIds,
     primaryCategoryId,

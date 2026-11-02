@@ -33,6 +33,7 @@ export function searchProducts(products: Product[], tree: CategoryTree, query: s
       [
         p.title,
         p.brand,
+        p.merkBron,
         p.line,
         catNames,
         ...p.variants.map((v) => v.sku),

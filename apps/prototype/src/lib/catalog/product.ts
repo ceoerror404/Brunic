@@ -1,4 +1,4 @@
-import type { Availability, Price, Product, ProductImage, SalesUnit, Variant } from "./types";
+import type { FotoSoort, Price, Product, ProductImage, SalesUnit, Variant } from "./types";
 
 const eur = new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR" });
 const num = new Intl.NumberFormat("nl-BE", { maximumFractionDigits: 2 });
@@ -27,12 +27,15 @@ export const UNIT_NAME: Record<SalesUnit, { one: string; many: string; short: st
   set: { one: "set", many: "sets", short: "set" },
 };
 
-export const AVAILABILITY_LABEL: Record<Availability, string> = {
-  "op-voorraad": "Op voorraad",
-  beperkt: "Beperkte voorraad",
-  "op-bestelling": "Op bestelling",
-  uitverkocht: "Tijdelijk uitverkocht",
-};
+/** Volgorde van de foto's: productfoto, overige foto's, details, sfeerfoto's, en de rolfoto als laatste. */
+export const FOTO_RANG: Record<FotoSoort, number> = { product: 0, overig: 1, detail: 2, sfeer: 3, rol: 9 };
+
+export const fotoRang = (i: ProductImage) => FOTO_RANG[i.soort ?? "overig"];
+
+/** 0 = mag vooraan staan, 1 = sfeerfoto, 2 = rolfoto. Sfeer- en rolfoto's komen enkel eerst als er niets anders is. */
+export const fotoTrede = (i: ProductImage) => (i.soort === "rol" ? 2 : i.soort === "sfeer" ? 1 : 0);
+
+export const isStaal = (v: Variant) => Object.values(v.options).some((w) => /staal/i.test(w));
 
 export function isPurchasable(p: Product, v?: Variant): boolean {
   if (p.pricing !== "fixed") return false;
@@ -69,16 +72,41 @@ export function variantById(p: Product, id: string | undefined): Variant | undef
 }
 
 /**
- * Beelden voor de gekozen kleur (of andere optie): eerst die van die kleur, dan de beelden
- * die bij geen enkele kleur horen (sfeerfoto's). Beelden van andere kleuren vallen weg.
+ * Beelden voor de gekozen variant: die van haar kleur en de beelden zonder kleur. Beelden van andere
+ * kleuren vallen weg. Bruikbare foto's eerst, dan sfeerfoto's, rolfoto's als laatste, en bij een
+ * bijzondere vorm (rond, organisch, loper) de foto in die vorm vooraan.
  */
 export function imagesForVariant(p: Product, v: Variant | undefined): ProductImage[] {
   if (!v) return p.images;
   const values = new Set(Object.values(v.options));
   const specific = p.images.filter((img) => img.optionValue && values.has(img.optionValue));
   const shared = p.images.filter((img) => !img.optionValue);
-  const list = [...specific, ...shared];
-  return list.length ? list : p.images;
+  const list = specific.length || shared.length ? [...specific, ...shared] : p.images;
+  const vormRang = (img: ProductImage) => (!img.vorm ? 0 : img.vorm === v.vorm ? -1 : 1);
+  return [...list].sort((a, b) => fotoTrede(a) - fotoTrede(b) || vormRang(a) - vormRang(b));
+}
+
+/**
+ * De variant waarop het product standaard opent, en die de kaart toont: de eerste beschikbare
+ * variant (geen staal) met het beste eerste beeld. Kaart en productpagina gebruiken allebei
+ * deze variant, zo tonen ze hetzelfde beeld.
+ */
+export function standaardVariant(p: Product): Variant {
+  const beschikbaar = p.variants.filter((v) => v.availability !== "uitverkocht");
+  const zonderStaal = beschikbaar.filter((v) => !isStaal(v));
+  const keuze = zonderStaal.length ? zonderStaal : beschikbaar.length ? beschikbaar : p.variants;
+  let beste = keuze[0];
+  let besteTrede = Infinity;
+  for (const v of keuze) {
+    const eerste = imagesForVariant(p, v)[0];
+    const trede = eerste ? fotoTrede(eerste) : 3;
+    if (trede < besteTrede) {
+      beste = v;
+      besteTrede = trede;
+    }
+    if (besteTrede === 0) break;
+  }
+  return beste;
 }
 
 /** Omschrijving van een variant voor winkelmand/verlanglijst: "Grijs · 60 × 180 cm". */

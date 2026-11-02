@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Product, ProductOption, Variant } from "@/lib/catalog/types";
 import {
-  AVAILABILITY_LABEL,
   findVariant,
   formatMoney,
   formatQuantity,
   imagesForVariant,
   isPurchasable,
   lineTotal,
+  standaardVariant,
   UNIT_NAME,
   variantById,
   variantLabel,
@@ -28,19 +28,6 @@ import { Icon } from "@/components/ui/icon";
 import { ImageSlot } from "@/components/ui/image-slot";
 import { Gallery } from "./gallery";
 import { clampQuantity, QuantityInput } from "./quantity-input";
-
-const AVAIL_DOT: Record<Variant["availability"], string> = {
-  "op-voorraad": "bg-success",
-  beperkt: "bg-warning",
-  "op-bestelling": "bg-warning",
-  uitverkocht: "bg-brand",
-};
-const AVAIL_TEXT: Record<Variant["availability"], string> = {
-  "op-voorraad": "text-success",
-  beperkt: "text-warning",
-  "op-bestelling": "text-warning",
-  uitverkocht: "text-brand-dark",
-};
 
 /**
  * PDP-kern: galerij (links) + bestelblok (rechts, kleeft bij scrollen) + infosecties
@@ -78,7 +65,8 @@ export function ProductView({
     return { ...basis, variants: basis.variants.map((v) => ({ ...v, availability: status.get(v.id) ?? v.availability })) };
   }, [basis, liveVarianten]);
 
-  const [variantId, setVariantId] = useState(() => (basis.variants.find((v) => v.availability !== "uitverkocht") ?? basis.variants[0]).id);
+  // Dezelfde variant als de kaart, zo opent de pagina op het beeld dat de klant net zag.
+  const [variantId, setVariantId] = useState(() => standaardVariant(basis).id);
   const variant: Variant = variantById(product, variantId) ?? product.variants[0];
   const [qty, setQty] = useState(product.quantity.min);
   const [drawer, setDrawer] = useState<ProductOption | null>(null);
@@ -239,22 +227,23 @@ export function ProductView({
               </div>
             )}
 
-            {product.pricing === "fixed" ? (
-              <p className="mt-5 flex flex-wrap items-center gap-2 text-[14px]">
-                <span className={`flex items-center gap-2 ${AVAIL_TEXT[variant.availability]}`}>
-                  <span className={`size-2 rounded-full ${AVAIL_DOT[variant.availability]}`} aria-hidden="true" />
-                  {AVAILABILITY_LABEL[variant.availability]}
-                </span>
-              </p>
-            ) : (
+            {/* Geen voorraadbelofte: Shopify volgt geen voorraad. "Uitverkocht" is wel echt: dan kan bestellen niet. */}
+            {product.pricing === "on-request" ? (
               <p className="mt-5 text-[14px] text-ink-80">
                 {isOpMaat(maatwerk)
                   ? "Prijs op aanvraag: de prijs hangt af van uw maten en afwerking. Vraag vrijblijvend een offerte aan — of kom de stalen bekijken in onze winkel."
                   : "Prijs op aanvraag: vraag vrijblijvend een offerte aan — of kom de stalenboeken bekijken in onze winkel."}
               </p>
+            ) : (
+              variant.availability === "uitverkocht" && (
+                <p className="mt-5 flex items-center gap-2 text-[14px] text-brand-dark">
+                  <span className="size-2 rounded-full bg-brand" aria-hidden="true" />
+                  Tijdelijk uitverkocht
+                </p>
+              )
             )}
 
-            <div ref={buyRef} className="mt-3">
+            <div ref={buyRef} className={product.pricing === "fixed" && variant.availability !== "uitverkocht" ? "mt-5" : "mt-3"}>
               {buyRow()}
             </div>
             {error && (
@@ -371,11 +360,7 @@ export function ProductView({
                       {v && !exact ? (
                         <span className="mt-0.5 block text-[13px] text-ink-60">Enkel met een andere {andere.join(" of ")}</span>
                       ) : (
-                        v && (
-                          <span className={`mt-0.5 block text-[13px] ${AVAIL_TEXT[v.availability]}`}>
-                            {product.pricing === "on-request" ? "Op maat" : AVAILABILITY_LABEL[v.availability]}
-                          </span>
-                        )
+                        v?.availability === "uitverkocht" && <span className="mt-0.5 block text-[13px] text-brand-dark">Tijdelijk uitverkocht</span>
                       )}
                     </span>
                     {v?.price && <Price price={v.price} size="sm" />}

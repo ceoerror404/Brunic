@@ -2,9 +2,9 @@
  * Compacte weergavemodellen voor kaarten en lijsten. De server mapt een volledig
  * Product naar deze vorm; zo krijgen client-componenten enkel wat ze tonen/filteren.
  */
-import type { Availability, ImageRef, Price, Product, ProductBadge } from "./types";
-import { lowestPrice, hasPriceRange } from "./product";
-import { derivedFacetValues } from "./filters";
+import type { Availability, ImageRef, Price, Product, ProductBadge, ProductImage, Variant } from "./types";
+import { fotoTrede, hasPriceRange, imagesForVariant, isStaal, lowestPrice, standaardVariant } from "./product";
+import { derivedFacetValues, variantWaarden, type VariantWaarden } from "./filters";
 import { ancestry, type CategoryTree } from "./tree";
 import { compactSrc } from "./cdn";
 
@@ -17,7 +17,10 @@ export type CardProduct = {
   brand?: string;
   /** Producttype (Gordijnstof, Behang, Vasttapijt …) — titels zijn vaak enkel een modelnaam. */
   type?: string;
+  /** De toonvariant als een filter die bepaalt: de link opent dan op die variant. Zonder: de standaardvariant. */
+  variantId?: string;
   image?: ImageRef;
+  /** Enkel een foto in dezelfde kleur als `image`. */
   hoverImage?: ImageRef;
   badges: ProductBadge[];
   pricing: Product["pricing"];
@@ -41,17 +44,87 @@ export const VORM_VAN_CATEGORIE: Record<string, string> = {
   "s-tapijten-speciale-vormen": "Organisch",
 };
 
+/** Eén variant in een lijst (enkel op de server): waaruit de kaart haar toonvariant kiest. */
+export type VariantKaart = {
+  id: string;
+  kleur?: string;
+  vorm?: string;
+  waarden: VariantWaarden;
+  price: Price | null;
+  availability: Availability;
+  staal: boolean;
+};
+
+/** Wat een kaart toont in één kleur (enkel op de server). */
+export type KleurKaart = {
+  staal: CardProduct["swatches"][number];
+  beeld?: ImageRef;
+  hover?: ImageRef;
+  /** Hoe goed het eerste beeld is: 0 = bruikbaar, 1 = sfeerfoto, 2 = rolfoto (fotoTrede). */
+  trede: number;
+};
+
 export type ListingItem = CardProduct & {
   facets: Record<string, string[]>;
   createdAt: string;
   popularity: number;
+  varianten: VariantKaart[];
+  kleuren: KleurKaart[];
+  standaardId?: string;
 };
 
 const AVAIL_RANK: Availability[] = ["op-voorraad", "beperkt", "op-bestelling", "uitverkocht"];
 
+const kleurOptie = (p: Product) => p.options.find((o) => /kleur|color|colour/i.test(o.name));
+
+/**
+ * Het hoverbeeld van een kaart: een foto in dezelfde kleur, liefst een sfeerfoto. Een foto zonder kleur
+ * mag enkel bij een product met één kleur: bij meer kleuren is niet zeker welke kleur erop staat.
+ * Anders geen hoverbeeld: dan blijft de foto gewoon staan.
+ */
+function hoverVoor(p: Product, kleur: string | undefined, kaart: ProductImage | undefined): ProductImage | undefined {
+  const nietKaart = (i: ProductImage) => i.src !== kaart?.src;
+  const eigen = (i: ProductImage) => kleur !== undefined && i.optionValue === kleur;
+  const eenKleur = (kleurOptie(p)?.values.length ?? 0) <= 1;
+  return (
+    p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && eigen(i)) ??
+    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort === "sfeer" && !i.optionValue) : undefined) ??
+    p.images.find((i) => nietKaart(i) && i.soort !== "rol" && eigen(i)) ??
+    (eenKleur ? p.images.find((i) => nietKaart(i) && i.soort !== "rol") : undefined)
+  );
+}
+
+/** De variant die een kleur vertegenwoordigt: beschikbaar en geen staal, als dat kan. */
+function variantVanKleur(varianten: Variant[]): Variant | undefined {
+  return varianten.find((v) => v.availability !== "uitverkocht" && !isStaal(v)) ?? varianten.find((v) => v.availability !== "uitverkocht") ?? varianten[0];
+}
+
+/** Per kleur van het product: staal, kaartbeeld en hoverbeeld. */
+function kleurKaarten(p: Product): KleurKaart[] {
+  const ko = kleurOptie(p);
+  if (!ko) return [];
+  return ko.values.map((waarde) => {
+    const variant = variantVanKleur(p.variants.filter((x) => x.options[ko.name] === waarde.value));
+    // Geen eigen en geen gedeeld beeld: niet terugvallen op een foto van een andere kleur.
+    const heeftBeeld = p.images.some((i) => !i.optionValue || i.optionValue === waarde.value);
+    const eerste = variant && heeftBeeld ? imagesForVariant(p, variant)[0] : undefined;
+    // Staal = kleurcode of (meestal) het kleurbeeld zelf: dan niet dubbel meesturen, de kaart leidt het af.
+    const swatch = waarde.swatch?.startsWith("url(") && eerste ? undefined : waarde.swatch;
+    return {
+      staal: { value: waarde.value, ...(swatch ? { swatch } : {}), image: img(eerste, false), variantId: variant?.id },
+      beeld: img(eerste),
+      hover: img(hoverVoor(p, waarde.value, eerste), false),
+      trede: eerste ? fotoTrede(eerste) : 3,
+    };
+  });
+}
+
 export function toCard(p: Product): CardProduct {
   const best = [...p.variants].sort((a, b) => AVAIL_RANK.indexOf(a.availability) - AVAIL_RANK.indexOf(b.availability))[0];
   const color = p.options.find((o) => o.name === "Kleur");
+  const standaard = standaardVariant(p);
+  const kaart = imagesForVariant(p, standaard)[0];
+  const ko = kleurOptie(p);
   const vormen: NonNullable<CardProduct["vormen"]> = {};
   for (const v of new Set(p.images.map((i) => i.vorm).filter((x): x is string => Boolean(x)))) {
     const metVorm = p.images.filter((i) => i.vorm === v);
@@ -66,26 +139,44 @@ export function toCard(p: Product): CardProduct {
     title: p.title,
     brand: p.brand,
     type: p.facets.type?.[0],
-    image: img(p.images[0]),
-    // Hover: de sfeerfoto (kamerbeeld), anders een tweede neutrale foto.
-    hoverImage: img(p.images.find((i, n) => n > 0 && /\s[–-]\s*sfeerfoto/i.test(i.alt)) ?? (p.images[1] && !p.images[1].optionValue ? p.images[1] : undefined), false),
+    // Hetzelfde beeld als het eerste op de productpagina: allebei van de standaardvariant.
+    image: img(kaart),
+    hoverImage: img(hoverVoor(p, ko && standaard ? standaard.options[ko.name] : undefined, kaart), false),
     badges: p.badges,
     pricing: p.pricing,
     price: lowestPrice(p),
     fromPrice: hasPriceRange(p),
     availability: best?.availability ?? "op-bestelling",
     swatchTotal: color?.values.length ?? 0,
-    swatches: color
-      ? color.values.slice(0, 4).map((v) => {
-          const variants = p.variants.filter((x) => x.options[color.name] === v.value);
-          const variant = variants.find((x) => x.availability !== "uitverkocht") ?? variants[0];
-          const beeld = p.images.find((x) => x.optionValue === v.value);
-          // Staal = kleurcode of (meestal) het kleurbeeld zelf: dan niet dubbel meesturen, de kaart leidt het af.
-          const swatch = v.swatch?.startsWith("url(") && beeld ? undefined : v.swatch;
-          return { value: v.value, ...(swatch ? { swatch } : {}), image: img(beeld, false), variantId: variant?.id };
-        })
-      : [],
+    swatches: color ? kleurKaarten(p).slice(0, 4).map((k) => k.staal) : [],
   };
+}
+
+/** Variant- en kleurgegevens per product één keer berekenen: de lijsten vragen ze bij elke aanvraag. */
+const LIJST_GEGEVENS = new WeakMap<Product, Pick<ListingItem, "varianten" | "kleuren" | "standaardId"> & { kaart: CardProduct }>();
+
+function lijstGegevens(p: Product) {
+  let g = LIJST_GEGEVENS.get(p);
+  if (!g) {
+    const ko = kleurOptie(p);
+    const waarden = variantWaarden(p);
+    g = {
+      kaart: toCard(p),
+      varianten: p.variants.map((v, i) => ({
+        id: v.id,
+        ...(ko ? { kleur: v.options[ko.name] } : {}),
+        ...(v.vorm ? { vorm: v.vorm } : {}),
+        waarden: waarden[i],
+        price: v.price,
+        availability: v.availability,
+        staal: isStaal(v),
+      })),
+      kleuren: kleurKaarten(p),
+      standaardId: standaardVariant(p)?.id,
+    };
+    LIJST_GEGEVENS.set(p, g);
+  }
+  return g;
 }
 
 /**
@@ -99,11 +190,15 @@ export function toListingItem(p: Product, tree?: CategoryTree): ListingItem {
   }
   // Lege filterwaarden niet meesturen (lange lijsten: elke byte telt × duizenden producten).
   for (const k of Object.keys(facets)) if (facets[k].length === 0) delete facets[k];
+  const { kaart, varianten, kleuren, standaardId } = lijstGegevens(p);
   return {
-    ...toCard(p),
+    ...kaart,
     facets,
     createdAt: p.createdAt,
     popularity: p.popularity,
+    varianten,
+    kleuren,
+    standaardId,
   };
 }
 

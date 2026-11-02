@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icon";
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
 /**
  * Zijpaneel (filters, varianten, mobiel menu, winkelmandbevestiging).
@@ -59,7 +59,7 @@ export function Drawer({
         const last = focusables[focusables.length - 1];
         const active = document.activeElement;
         // Focus op het paneel zelf (net geopend) of erbuiten: terug naar begin/einde.
-        const inside = active instanceof HTMLElement && focusables.includes(active);
+        const inside = active instanceof HTMLElement && active !== panel.current && panel.current.contains(active);
         if (e.shiftKey && (!inside || active === first)) {
           e.preventDefault();
           last.focus();

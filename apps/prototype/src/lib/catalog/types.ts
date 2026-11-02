@@ -101,11 +101,15 @@ export type QuantityRule = {
 
 export type Availability = "op-voorraad" | "beperkt" | "op-bestelling" | "uitverkocht";
 
+/** Soort foto, uit de alt-tekst of de bestandsnaam. Bepaalt de volgorde en wat vooraan mag staan. */
+export type FotoSoort = "product" | "overig" | "detail" | "sfeer" | "rol";
+
 export type ProductImage = ImageRef & {
   /** Hoort dit beeld bij één optiewaarde (bv. Kleur = Grijs)? */
   optionValue?: string;
   /** Vorm van het tapijt op de foto als die niet rechthoekig is ("Rond", "Organisch", "Loper"). */
   vorm?: string;
+  soort?: FotoSoort;
 };
 
 export type OptionValue = {
@@ -128,6 +132,12 @@ export type Variant = {
   options: Record<string, string>;
   price: Price | null;
   availability: Availability;
+  /** Kleurfamilie(s) van deze variant, genormaliseerd zoals de kleurfilter. */
+  kleurfamilies?: string[];
+  /** Maatklasse van de breedte (MAAT_BUCKETS). Stalen hebben er geen. */
+  maatKlasse?: string;
+  /** Vorm uit de maat ("Rond", "Rechthoekig"…). */
+  vorm?: string;
 };
 
 export type Spec = { label: string; value: string };
@@ -143,8 +153,10 @@ export type Product = {
    */
   aliases?: { id: string; slug: string }[];
   title: string;
-  /** Merk / leverancier (Shopify vendor). */
+  /** Merk waaronder het product op de site staat (Shopify vendor, of het moedermerk: src/data/merken.ts). */
   brand?: string;
+  /** De Shopify-vendor als die onder een moedermerk valt (Desso onder Tarkett): blijft vindbaar in de zoekfunctie. */
+  merkBron?: string;
   /** Collectie-/lijnnaam, groot getoond op de PDP (zoals de modelnaam bij de referentie). */
   line?: string;
   /** Alle categorieën waarin het product verschijnt (stabiele ID's). */

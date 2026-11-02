@@ -19,6 +19,10 @@ const { buildListing } = await imp("lib/catalog/listing.ts");
 const F = await imp("lib/catalog/filters.ts");
 const N = await imp("lib/catalog/facet-normalisatie.ts");
 const { filterProfiel, FILTERPROFIEL_GEMENGD } = await imp("data/filterprofielen.ts");
+const { imagesForVariant, standaardVariant, fotoTrede } = await imp("lib/catalog/product.ts");
+const { compactSrc } = await imp("lib/catalog/cdn.ts");
+const { searchProducts } = await imp("lib/catalog/search.ts");
+const { productJsonLd } = await imp("lib/site/seo.ts");
 
 let ok = 0;
 const fouten = [];
@@ -32,6 +36,14 @@ function check(naam, fn) {
 }
 const ids = (item, key) => (item.facets[key] ?? []).map(F.waardeId);
 const heeft = (item, key, id) => ids(item, key).includes(id);
+const VARIANTFILTER = new Set(F.VARIANT_FACETS);
+/** Past een item bij een keuze? De variantfilters (kleur, maat, vorm, prijs) moeten samen op één variant kloppen. */
+const past = (item, keuze) => {
+  const paren = Object.entries(keuze);
+  if (!paren.filter(([k]) => !VARIANTFILTER.has(k)).every(([k, id]) => heeft(item, k, id))) return false;
+  const opVariant = paren.filter(([k]) => VARIANTFILTER.has(k));
+  return !opVariant.length || item.varianten.some((v) => opVariant.every(([k, id]) => v.waarden[k]?.includes(id)));
+};
 const pct = (a, b) => `${Math.round((100 * a) / Math.max(b, 1))}%`;
 
 /* ---------------- normalisatie (eenheden) ---------------- */
@@ -197,11 +209,11 @@ for (const [rootId, naam] of Object.entries(ROOTS)) {
       const gy = top[y];
       const a = gx.options[0];
       // Een waarde in gy die samen met a iets oplevert.
-      const b = gy.options.find((o) => items.some((i) => heeft(i, gx.def.key, a.value) && heeft(i, gy.def.key, o.value)));
+      const b = gy.options.find((o) => items.some((i) => past(i, { [gx.def.key]: a.value, [gy.def.key]: o.value })));
       if (!b) continue;
       check(`${naam}: ${gx.def.key}=${a.value} & ${gy.def.key}=${b.value}`, () => {
         const r = L({ [gx.def.key]: a.value, [gy.def.key]: b.value });
-        const verwacht = items.filter((i) => heeft(i, gx.def.key, a.value) && heeft(i, gy.def.key, b.value)).length;
+        const verwacht = items.filter((i) => past(i, { [gx.def.key]: a.value, [gy.def.key]: b.value })).length;
         assert.equal(r.total, verwacht);
         assert.equal(r.groups.find((g) => g.def.key === gy.def.key).options.find((o) => o.value === b.value).count, verwacht);
         assert.equal(r.groups.find((g) => g.def.key === gx.def.key).options.find((o) => o.value === a.value).count, verwacht);
@@ -219,7 +231,7 @@ for (const [rootId, naam] of Object.entries(ROOTS)) {
       const gx = basis.groups[x];
       const gy = basis.groups[y];
       for (const a of gx.options) {
-        const b = gy.options.find((o) => !items.some((i) => heeft(i, gx.def.key, a.value) && heeft(i, gy.def.key, o.value)));
+        const b = gy.options.find((o) => !items.some((i) => past(i, { [gx.def.key]: a.value, [gy.def.key]: o.value })));
         if (!b) continue;
         check(`${naam}: lege combinatie ${gx.def.key}=${a.value} & ${gy.def.key}=${b.value}`, () => {
           const r = L({ [gx.def.key]: a.value, [gy.def.key]: b.value });
@@ -266,7 +278,156 @@ for (const [rootId, naam] of Object.entries(ROOTS)) {
     assert.equal(r.total, items.length);
     assert.deepEqual(r.state.selection, {});
   });
+
+  // Audit R3-03: na een keuze staat er nooit een filter zonder waarden.
+  check(`${naam}: geen lege filtergroepen na een keuze`, () => {
+    for (const g of basis.groups) {
+      for (const o of g.options) {
+        const leeg = L({ [g.def.key]: o.value }).groups.filter((x) => x.options.length === 0);
+        assert.equal(leeg.length, 0, `${g.def.key}=${o.value}: ${leeg.map((x) => x.def.key).join(",")}`);
+      }
+    }
+  });
+
+  // Audit R3-21: de kaart toont de variant die aan de keuze voldoet.
+  const kaartVariant = (kaart) => {
+    const p = all.find((x) => x.id === kaart.id);
+    return { p, v: kaart.variantId ? p.variants.find((x) => x.id === kaart.variantId) : standaardVariant(p) };
+  };
+  check(`${naam}: de kaart volgt de kleurfilter`, () => {
+    for (const o of basis.groups.find((g) => g.def.key === "kleur")?.options ?? []) {
+      for (const kaart of L({ kleur: o.value, pagina: "999" }).items) {
+        const { p, v } = kaartVariant(kaart);
+        const opVariant = p.variants.some((x) => (x.kleurfamilies ?? []).map(F.waardeId).includes(o.value));
+        if (!opVariant) continue; // de kleur staat enkel op het product: elke variant telt
+        assert.ok((v.kleurfamilies ?? []).map(F.waardeId).includes(o.value), `${p.slug}: ${o.value} toont variant ${v.id}`);
+        const kleur = v.options.Kleur;
+        if (kleur && p.options.find((x) => x.name === "Kleur")?.values.length > 4) {
+          assert.ok(kaart.swatches.some((s) => s.value === kleur), `${p.slug}: gekozen kleur ${kleur} niet bij de stalen`);
+        }
+      }
+    }
+  });
 }
+
+/* ---------------- beeld, kleur en prijs op de kaart (audit 31/10/2026, R3-02, -04, -05, -21) ---------------- */
+{
+  const desc = descendantIds(tree, "c03");
+  const tapijten = products.filter((p) => p.categoryIds.some((c) => desc.has(c)));
+  const items = tapijten.map((p) => toListingItem(p));
+  const L = (sp) => buildListing(items, sp, {}, undefined, filterProfiel("c03"));
+  const klassen = F.PRICE_BUCKETS.filter((b) => b.value !== "op-aanvraag");
+  const inKlasse = (v, b) => v.price && v.price.amount.amount >= b.min && v.price.amount.amount < b.max;
+  const metPrijs = tapijten.filter((p) => p.pricing === "fixed");
+
+  check("prijsfilter: een tapijt staat in elke klasse waarin een van zijn maten valt", () => {
+    for (const b of klassen) {
+      const verwacht = metPrijs.filter((p) => p.variants.some((v) => inKlasse(v, b))).map((p) => p.id).sort();
+      assert.deepEqual(L({ prijs: b.value, pagina: "999" }).items.map((i) => i.id).sort(), verwacht, b.value);
+    }
+  });
+  check("maat + prijs: de prijs geldt voor een maat in die klasse", () => {
+    for (const m of F.MAAT_BUCKETS) {
+      for (const b of klassen) {
+        const verwacht = metPrijs.filter((p) => p.variants.some((v) => N.maatKlassen([v.options.Maat ?? ""]).includes(m.value) && inKlasse(v, b))).length;
+        const r = L({ maat: m.value, prijs: b.value });
+        assert.equal(r.total, verwacht, `${m.value} + ${b.value}`);
+        assert.equal(r.groups.find((g) => g.def.key === "prijs").options.find((o) => o.value === b.value)?.count ?? 0, verwacht, "telling prijs");
+        assert.equal(r.groups.find((g) => g.def.key === "maat").options.find((o) => o.value === m.value)?.count ?? 0, verwacht, "telling maat");
+      }
+    }
+  });
+  check("prijsfilter: de kaart toont een prijs in de gekozen klasse en de link opent daarop", () => {
+    for (const b of klassen) {
+      for (const k of L({ prijs: b.value, pagina: "999" }).items) {
+        const prijs = k.price?.amount.amount;
+        assert.ok(prijs >= b.min && prijs < b.max, `${k.slug}: € ${prijs} bij ${b.value}`);
+        const p = tapijten.find((x) => x.id === k.id);
+        const v = k.variantId ? p.variants.find((x) => x.id === k.variantId) : standaardVariant(p);
+        assert.equal(v.price?.amount.amount, prijs, `${k.slug}: de link opent niet op de getoonde prijs`);
+      }
+    }
+  });
+  check("sorteren op prijs volgt de prijs op de kaart", () => {
+    const prijzen = L({ prijs: "250-plus", sorteer: "prijs-op", pagina: "999" }).items.map((k) => k.price.amount.amount);
+    assert.deepEqual(prijzen, [...prijzen].sort((a, b) => a - b));
+  });
+  check("vormfilter: de kaart linkt naar een maat in die vorm", () => {
+    for (const k of L({ vorm: "rond", pagina: "999" }).items) {
+      const p = tapijten.find((x) => x.id === k.id);
+      const v = k.variantId ? p.variants.find((x) => x.id === k.variantId) : standaardVariant(p);
+      assert.equal(v.vorm, "Rond", k.slug);
+    }
+  });
+  check("de browser krijgt geen servergegevens", () => {
+    const k = L({ kleur: "grijs" }).items[0];
+    for (const veld of ["varianten", "kleuren", "standaardId", "facets", "vormen", "createdAt", "popularity"]) assert.ok(!(veld in k), veld);
+  });
+}
+
+check("kaart en productpagina openen op hetzelfde beeld", () => {
+  for (const p of products) {
+    const eerste = imagesForVariant(p, standaardVariant(p))[0];
+    assert.equal(toListingItem(p).image?.src, eerste ? compactSrc(eerste.src) : undefined, p.slug);
+  }
+});
+check("een sfeer- of rolfoto komt enkel eerst als er niets anders is", () => {
+  for (const p of products) {
+    const eerste = imagesForVariant(p, standaardVariant(p))[0];
+    if (!eerste || fotoTrede(eerste) === 0) continue;
+    const beter = p.variants.some((v) => imagesForVariant(p, v)[0] && fotoTrede(imagesForVariant(p, v)[0]) < fotoTrede(eerste));
+    assert.ok(!beter || p.variants.every((v) => v.availability === "uitverkocht"), `${p.slug}: ${eerste.soort} terwijl een andere variant beter kan`);
+    for (const v of p.variants) {
+      const lijst = imagesForVariant(p, v);
+      const rol = lijst.findIndex((i) => i.soort === "rol");
+      if (rol >= 0) assert.ok(lijst.slice(rol).every((i) => i.soort === "rol"), `${p.slug}: rolfoto voor een andere foto`);
+    }
+  }
+});
+check("hover: enkel een foto in de kleur van de kaart", () => {
+  for (const p of products) {
+    const k = toListingItem(p);
+    if (!k.hoverImage) continue;
+    const hover = p.images.find((i) => compactSrc(i.src) === k.hoverImage.src);
+    const ko = p.options.find((o) => /kleur|color|colour/i.test(o.name));
+    if (!ko || ko.values.length <= 1) continue;
+    const kleur = standaardVariant(p).options[ko.name];
+    assert.equal(hover?.optionValue, kleur, `${p.slug}: kaart ${kleur}, hover ${hover?.optionValue ?? "zonder kleur"}`);
+    assert.notEqual(k.hoverImage.src, k.image?.src, `${p.slug}: hover = kaartbeeld`);
+  }
+});
+check("Beauflor: _rsh_ is een sfeerfoto, _psh een productfoto", () => {
+  const beelden = products.flatMap((p) => p.images);
+  const rsh = beelden.filter((i) => /_rsh[_.]/i.test(i.src.split("?")[0]));
+  const psh = beelden.filter((i) => /_psh[_.]/i.test(i.src.split("?")[0]));
+  assert.ok(rsh.length > 0 && psh.length > 0);
+  assert.ok(rsh.every((i) => i.soort === "sfeer"));
+  assert.ok(psh.every((i) => i.soort === "product"));
+});
+check("Breedte is geen kleur: geen kleurbeelden, wel een rolbreedte", () => {
+  const enkelBreedte = products.filter((p) => p.options.length === 1 && /breedte/i.test(p.options[0].name));
+  assert.ok(enkelBreedte.length > 0);
+  for (const p of enkelBreedte) {
+    assert.ok(p.images.every((i) => !i.optionValue), `${p.slug}: foto aan een breedte gekoppeld`);
+    assert.ok(p.facets.rolbreedte?.length > 0, `${p.slug}: geen rolbreedte`);
+  }
+});
+check("Desso staat onder Tarkett en blijft vindbaar", () => {
+  assert.equal(products.filter((p) => p.brand === "Desso" || p.facets.merk?.includes("Desso")).length, 0);
+  const desso = products.filter((p) => p.merkBron === "Desso");
+  assert.ok(desso.length > 0 && desso.every((p) => p.brand === "Tarkett" && p.specs.find((s) => s.label === "Merk")?.value === "Tarkett"));
+  const gevonden = new Set(searchProducts(products, tree, "desso").map((p) => p.id));
+  assert.ok(desso.every((p) => gevonden.has(p.id)), "niet elk Desso-product is vindbaar op 'desso'");
+  assert.deepEqual(F.parseListState(new URLSearchParams("merk=desso,tarkett")).selection, { merk: ["tarkett"] });
+  assert.equal(products.filter((p) => /^fuse b755/i.test(p.title)).length, 2, "Fuse B755: de twee ontwerpen moeten apart blijven");
+});
+check("geen voorraadbelofte aan zoekmachines", () => {
+  for (const p of products) {
+    const tekst = JSON.stringify(productJsonLd(p));
+    assert.ok(!tekst.includes("InStock") && !tekst.includes("BackOrder"), p.slug);
+    assert.equal(tekst.includes("OutOfStock"), p.pricing === "fixed" && p.variants.filter((v) => v.price).every((v) => v.availability === "uitverkocht"), p.slug);
+  }
+});
 
 /* ---------------- gemengde lijsten ---------------- */
 check("gemengd: alle producten → gemengd profiel met Categorie", () => {

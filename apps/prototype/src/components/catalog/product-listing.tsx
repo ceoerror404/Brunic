@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
 import type { ListingData } from "@/lib/catalog/listing";
 import { activeFilterCount, labelFor, PAGE_SIZE, serializeListState, SORTS, type FacetGroup, type FacetLabelMap, type ListState, type SortKey } from "@/lib/catalog/filters";
 import { normalize } from "@/lib/catalog/search";
@@ -44,9 +44,12 @@ export function ProductListing({
   // Blijft true tot de serverrender van de nieuwe URL binnen is (navigatie in een transition).
   const [pending, startTransition] = useTransition();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Na "meer tonen": het eerste nieuwe product en de scrollpositie, tot de nieuwe producten er zijn.
+  const focusVanaf = useRef<{ index: number; scrollY: number } | null>(null);
 
   const update = useCallback(
     (next: Partial<ListState>, resetPage = true) => {
+      if (resetPage) focusVanaf.current = null;
       const merged: ListState = { ...state, ...next, page: resetPage ? 1 : (next.page ?? state.page) };
       // Andere parameters (?q=, ?weergave=) blijven staan. Gelezen bij de klik en niet via
       // useSearchParams: zo blijft de lijst in de server-HTML (geen client-side bailout).
@@ -97,21 +100,35 @@ export function ProductListing({
     };
   }, []);
 
-  // Na "meer tonen": focus naar het eerste nieuwe product (toetsenbordgebruikers).
-  const firstNewRef = useRef<HTMLLIElement>(null);
-  const [focusNew, setFocusNew] = useState(false);
+  // Na "meer tonen": focus naar het eerste nieuwe product (toetsenbordgebruikers), pas als het er is.
+  // De pagina blijft staan waar de klant was: de browser houdt anders de knop in beeld (scroll
+  // anchoring) en de klant slaat 48 producten over. Vóór het tekenen, dus zonder zichtbare sprong.
+  const raster = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    const vanaf = focusVanaf.current;
+    if (vanaf === null || shown.length <= vanaf.index) return;
+    focusVanaf.current = null;
+    raster.current?.querySelector<HTMLAnchorElement>(`[data-kaart="${vanaf.index}"] h3 a`)?.focus({ preventScroll: true });
+    window.scrollTo({ top: vanaf.scrollY, behavior: "instant" });
+  }, [shown.length]);
+
+  // Verdwijnt het element met de focus (een chip, een filter zonder waarden meer), dan gaat de focus
+  // naar "Alle filters" in plaats van verloren.
+  const laatsteFocus = useRef<HTMLElement | null>(null);
+  const alleFilters = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (focusNew && firstNewRef.current) {
-      firstNewRef.current.querySelector<HTMLAnchorElement>("a")?.focus();
-      setFocusNew(false);
-    }
-  }, [focusNew, shown.length]);
+    const el = laatsteFocus.current;
+    if (el && !el.isConnected && document.activeElement === document.body) alleFilters.current?.focus({ preventScroll: true });
+  }, [groups, state]);
 
   return (
     <div>
       <div ref={meetpunt} aria-hidden="true" />
       {/* Filterbalk */}
       <div
+        onFocus={(e) => {
+          laatsteFocus.current = e.target;
+        }}
         className={`z-30 bg-white py-3 transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-[var(--header-h,106px)] ${
           vast ? "lg:-translate-y-[var(--header-inklap,0px)]" : ""
         }`}
@@ -122,7 +139,7 @@ export function ProductListing({
               <FacetDropdown key={g.def.key} group={g} selected={state.selection[g.def.key] ?? []} onToggle={toggleValue} onClear={clearKey} />
             ))}
           </div>
-          <button type="button" onClick={() => setDrawerOpen(true)} className="btn btn-outline h-12 gap-3 px-4 text-[15px] sm:px-5" aria-haspopup="dialog">
+          <button ref={alleFilters} type="button" onClick={() => setDrawerOpen(true)} className="btn btn-outline h-12 gap-3 px-4 text-[15px] sm:px-5" aria-haspopup="dialog">
             Alle filters
             {activeCount > 0 ? (
               <span className="flex size-6 items-center justify-center rounded-full bg-ink text-xs text-white">
@@ -218,11 +235,12 @@ export function ProductListing({
           ))
         ) : (
           // Op mobiel twee kolommen (B22): één kaart per rij gaf ±440 px per product.
-          <ul role="list" className="mt-4 grid grid-cols-2 gap-x-2 gap-y-4 sm:gap-x-3 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-5">
+          <ul ref={raster} role="list" className="mt-4 grid grid-cols-2 gap-x-2 gap-y-4 sm:gap-x-3 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-5">
             {shown.map((p, i) => (
               <FragmentWithPromo key={p.id} index={i} promo={promo && activeCount === 0 && i === 8 ? promo : null}>
-                <li ref={i === (data.state.page - 1) * PAGE_SIZE && data.state.page > 1 ? firstNewRef : undefined}>
-                  <ProductCard product={p} priority={i < 4} tone={i} />
+                <li data-kaart={i}>
+                  {/* Andere toonvariant = nieuwe kaart: een gekozen staal van de vorige filter blijft niet hangen. */}
+                  <ProductCard key={p.variantId ?? ""} product={p} priority={i < 4} tone={i} />
                 </li>
               </FragmentWithPromo>
             ))}
@@ -244,8 +262,8 @@ export function ProductListing({
               type="button"
               disabled={pending}
               onClick={() => {
+                focusVanaf.current = { index: shown.length, scrollY: window.scrollY };
                 update({ page: state.page + 1 }, false);
-                setFocusNew(true);
               }}
               className="btn btn-outline mt-2"
             >

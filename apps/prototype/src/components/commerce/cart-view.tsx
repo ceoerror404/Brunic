@@ -6,7 +6,7 @@ import { lopendeKassa, useCart, useWishlist } from "@/lib/store/stores";
 import { useProducts } from "@/lib/store/use-products";
 import { routes } from "@/lib/routes";
 import { SITE } from "@/lib/site/config";
-import { AVAILABILITY_LABEL, formatMoney, formatQuantity, lineTotal, UNIT_NAME, UNIT_SUFFIX } from "@/lib/catalog/product";
+import { formatMoney, formatQuantity, lineTotal, UNIT_NAME, UNIT_SUFFIX } from "@/lib/catalog/product";
 import { ImageSlot } from "@/components/ui/image-slot";
 import { Icon } from "@/components/ui/icon";
 import { QuantityInput } from "@/components/product/quantity-input";
@@ -177,9 +177,6 @@ export function CartView({ departments }: { departments: ReactNode }) {
                         {v.price.compareAt && <s className="ml-2 text-ink-60">{formatMoney(v.price.compareAt.amount)}</s>}
                       </>
                     )}
-                    <span className={`ml-3 ${v.availability === "op-voorraad" ? "text-success" : v.availability === "uitverkocht" ? "text-brand-dark" : "text-warning"}`}>
-                      {AVAILABILITY_LABEL[v.availability]}
-                    </span>
                   </p>
                   )}
                   {v.availability === "uitverkocht" && <p className="mt-1 text-[13px] text-brand-dark">Deze uitvoering is intussen uitverkocht — kies een andere of verwijder ze.</p>}

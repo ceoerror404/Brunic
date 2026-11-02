@@ -16,8 +16,8 @@
  * Logica: OF binnen één filter, EN tussen filters (zoals Shopify Search & Discovery);
  * filters met `logica: "en"` (Eigenschappen) eisen elke gekozen waarde.
  */
-import type { Product } from "./types";
-import { lowestPrice } from "./product";
+import { MERK_ONDER } from "@/data/merken";
+import type { Product, Variant } from "./types";
 
 /** Een vaste klasse van een getal (prijs, maat…): `value` staat in de URL. */
 export type Bucket = { value: string; label: string; min: number; max: number };
@@ -170,15 +170,62 @@ export function waardeId(s: string): string {
 
 const idsVan = (waarden: string[] | undefined) => (waarden ?? []).map(waardeId);
 
-/** Alle filterwaarden van een product, inclusief de afgeleide prijsklasse. */
+/** Oude links naar een submerk: ?merk=desso toont Tarkett (src/data/merken.ts). */
+const MERK_ALIAS: Record<string, string> = Object.fromEntries(Object.entries(MERK_ONDER).map(([van, naar]) => [waardeId(van), waardeId(naar)]));
+
+/**
+ * Filters die per variant gelden: een product verschijnt als één variant aan al deze filters samen
+ * voldoet. "Grijs + 170–240 cm + € 100–250" vindt dus geen tapijt dat enkel in een andere maat grijs is.
+ */
+export const VARIANT_FACETS = ["kleur", "maat", "vorm", "prijs"] as const;
+export type VariantFacetKey = (typeof VARIANT_FACETS)[number];
+/** Waarde-ID's van een variant per variantfilter. */
+export type VariantWaarden = Partial<Record<VariantFacetKey, string[]>>;
+
+const isVariantFacet = (key: string): key is VariantFacetKey => (VARIANT_FACETS as readonly string[]).includes(key);
+
+const prijsKlasse = (v: Variant) => (v.price ? (bucketVoor(PRICE_BUCKETS, v.price.amount.amount) ?? "250-plus") : undefined);
+
+/** Alle filterwaarden van een product. Een product zit in elke prijsklasse waarin een van zijn varianten valt. */
 export function derivedFacetValues(p: Product): Record<string, string[]> {
-  const lp = lowestPrice(p);
-  let prijs = "op-aanvraag";
-  if (lp && p.pricing === "fixed") {
-    const a = lp.amount.amount;
-    prijs = bucketVoor(PRICE_BUCKETS, a) ?? "250-plus";
+  const klassen = p.pricing === "fixed" ? [...new Set(p.variants.map(prijsKlasse).filter((k): k is string => Boolean(k)))] : [];
+  return { ...p.facets, prijs: klassen.length ? klassen : ["op-aanvraag"] };
+}
+
+/**
+ * Filterwaarden per variant, in de volgorde van `p.variants`. Een waarde die enkel op het product staat
+ * (bv. een kleurfamilie zonder kleurvariant) geldt voor elke variant: zo blijft de som van de varianten
+ * gelijk aan de filterwaarden van het product.
+ */
+export function variantWaarden(p: Product): VariantWaarden[] {
+  const uit: Required<VariantWaarden>[] = p.variants.map((v) => {
+    const klasse = p.pricing === "fixed" ? prijsKlasse(v) : undefined;
+    return {
+      kleur: idsVan(v.kleurfamilies),
+      maat: v.maatKlasse ? [v.maatKlasse] : [],
+      vorm: v.vorm ? [waardeId(v.vorm)] : [],
+      prijs: klasse ? [klasse] : [],
+    };
+  });
+  const product = derivedFacetValues(p);
+  for (const key of VARIANT_FACETS) {
+    const opVariant = new Set(uit.flatMap((w) => w[key]));
+    const erfbaar = idsVan(product[key]).filter((id) => !opVariant.has(id));
+    if (erfbaar.length) for (const w of uit) w[key] = [...w[key], ...erfbaar];
   }
-  return { ...p.facets, prijs: [prijs] };
+  return uit;
+}
+
+type ActieveVariantFilter = { key: VariantFacetKey; values: string[] };
+
+/** Voldoet deze variant aan al deze filters? OF binnen een filter, EN tussen de filters. */
+export function variantVoldoet(w: VariantWaarden, actief: ActieveVariantFilter[]): boolean {
+  return actief.every((f) => f.values.some((id) => w[f.key]?.includes(id)));
+}
+
+/** De gekozen variantfilters uit een selectie, eventueel zonder één sleutel. */
+export function actieveVariantFilters(selection: Selection, behalve?: string): ActieveVariantFilter[] {
+  return VARIANT_FACETS.filter((key) => key !== behalve && (selection[key]?.length ?? 0) > 0).map((key) => ({ key, values: selection[key] }));
 }
 
 /** Wat de lijstfuncties van een item nodig hebben. */
@@ -190,6 +237,8 @@ export type Filterable = {
   popularity: number;
   price: { amount: { amount: number } } | null;
   pricing: "fixed" | "on-request";
+  /** Per variant de waarden van de variantfilters. Ontbreekt dit, dan telt het product als geheel. */
+  varianten?: { waarden: VariantWaarden }[];
 };
 
 /** Gekozen waarde-ID's per filtersleutel. */
@@ -213,14 +262,24 @@ export function applyFilters<T extends Filterable>(items: T[], selection: Select
   const actief = Object.entries(selection)
     .filter(([key, values]) => key !== exceptKey && values.length > 0)
     .map(([key, values]) => ({ key, values, en: FACET_BY_KEY.get(key)?.logica === "en" }));
+  const opVariant = actieveVariantFilters(selection, exceptKey);
   return items.filter((p) => {
     if (offersOnly && !p.badges.includes("aanbieding")) return false;
+    const perVariant = opVariant.length > 0 && Boolean(p.varianten?.length);
     for (const f of actief) {
+      if (perVariant && isVariantFacet(f.key)) continue;
       const pv = idsVan(p.facets[f.key]);
       if (f.en ? !f.values.every((v) => pv.includes(v)) : !f.values.some((v) => pv.includes(v))) return false;
     }
-    return true;
+    return !perVariant || p.varianten!.some((v) => variantVoldoet(v.waarden, opVariant));
   });
+}
+
+/** De waarden van een filter om te tellen: bij een variantfilter enkel die van de varianten die aan de andere variantfilters voldoen. */
+function waardenVoorTelling(p: Filterable, key: string, selection: Selection): string[] {
+  const andere = isVariantFacet(key) && p.varianten?.length ? actieveVariantFilters(selection, key) : [];
+  if (!andere.length) return idsVan(p.facets[key]);
+  return p.varianten!.filter((v) => variantVoldoet(v.waarden, andere)).flatMap((v) => v.waarden[key as VariantFacetKey] ?? []);
 }
 
 const priceOf = (p: Filterable) => (p.pricing === "fixed" && p.price ? p.price.amount.amount : null);
@@ -309,8 +368,10 @@ export function facetGroups<T extends Filterable>(
 
     const base = applyFilters(items, selection, offersOnly, def.logica === "en" ? undefined : key);
     const counts = new Map<string, number>();
-    for (const p of base) for (const id of new Set(idsVan(p.facets[key]))) counts.set(id, (counts.get(id) ?? 0) + 1);
+    for (const p of base) for (const id of new Set(waardenVoorTelling(p, key, selection))) counts.set(id, (counts.get(id) ?? 0) + 1);
     for (const v of chosen) if (!counts.has(v)) counts.set(v, 0);
+    // Na een keuze kan een filter geen enkele waarde meer hebben: dan geen lege knop tonen.
+    if (counts.size === 0) continue;
 
     const options: FacetOption[] = [...counts.entries()].map(([value, count]) => {
       const label = labelFor(key, value, labels, universum.get(value)?.label);
@@ -339,7 +400,7 @@ export function parseListState(params: URLSearchParams): ListState {
     const raw = params.get(def.key);
     if (raw) {
       // ID's, maar ook labels (oude links, ?categorie=Behang): waardeId maakt er hetzelfde van.
-      const vals = [...new Set(raw.split(",").map(waardeId).filter(Boolean))];
+      const vals = [...new Set(raw.split(",").map(waardeId).filter(Boolean).map((v) => (def.key === "merk" ? (MERK_ALIAS[v] ?? v) : v)))];
       if (vals.length) selection[def.key] = vals;
     }
   }

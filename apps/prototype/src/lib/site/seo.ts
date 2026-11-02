@@ -128,11 +128,9 @@ function offers(p: Product) {
   const bedragen = geprijsd.map((v) => v.price!.amount.amount);
   const [laag, hoog] = [Math.min(...bedragen), Math.max(...bedragen)];
   const per = PRIJS_PER[geprijsd[0].price!.unit];
-  const availability = geprijsd.some((v) => v.availability === "op-voorraad" || v.availability === "beperkt")
-    ? "https://schema.org/InStock"
-    : geprijsd.some((v) => v.availability === "op-bestelling")
-      ? "https://schema.org/BackOrder"
-      : "https://schema.org/OutOfStock";
+  // Geen voorraad beloven: Shopify volgt die niet (geen ERP gekoppeld). Google vraagt dit veld niet verplicht.
+  // Enkel "uitverkocht" is echt: dan kan de klant het niet bestellen.
+  const uitverkocht = geprijsd.every((v) => v.availability === "uitverkocht");
   // Vinyl kost bv. € 11,99 per m²: zonder eenheid leest een zoekmachine dat als prijs per stuk.
   const eenheid = (bedrag: Record<string, string>) =>
     per
@@ -146,7 +144,13 @@ function offers(p: Product) {
           },
         }
       : {};
-  const basis = { priceCurrency: "EUR", availability, itemCondition: "https://schema.org/NewCondition", url: absoluteUrl(routes.product(p.slug)), seller: { "@id": ORG_ID } };
+  const basis = {
+    priceCurrency: "EUR",
+    ...(uitverkocht ? { availability: "https://schema.org/OutOfStock" } : {}),
+    itemCondition: "https://schema.org/NewCondition",
+    url: absoluteUrl(routes.product(p.slug)),
+    seller: { "@id": ORG_ID },
+  };
   // Eén prijs → Offer; verschillende prijzen per variant → AggregateOffer met de volledige vork.
   return laag === hoog
     ? { "@type": "Offer", price: laag.toFixed(2), ...basis, ...eenheid({ price: laag.toFixed(2) }) }

@@ -1,6 +1,6 @@
 # Filtersysteem — één systeem voor de hele winkel
 
-> Stand 24/10/2026 (audit + herwerking, Alexander met Claude). Code: `apps/prototype`. Cijfers: catalogus-momentopname van 22/10/2026 (4.070 producten op de site).
+> Stand 02/11/2026 (P2-punten audit 31/10, Alexander met Claude). Code: `apps/prototype`. Cijfers in de matrix: catalogus-momentopname van 22/10/2026 (4.070 producten op de site).
 > Beslissingen over de filtertaxonomie per afdeling: `architectuur.md` §Filters & facetten. Dit document beschrijft de bouw.
 
 ## Principe
@@ -37,8 +37,9 @@ Filteren gebeurt **op de server, op de volledige catalogus** (niet op de geladen
 ## Gedrag — overal identiek
 
 - **OF binnen een filter, EN tussen filters.** Uitzondering: **Eigenschappen** gebruikt EN (wasbaar + brandvertragend = beide). Eigenschappen zijn geen alternatieven maar eisen.
+- **Kleur, Maat, Vorm en Prijs gelden per variant.** Een product verschijnt als één variant aan al deze filters samen voldoet. "Grijs + 170–240 cm + € 100–250" vindt dus geen tapijt dat enkel in een andere maat grijs is. Een waarde die enkel op het product staat (een kleurfamilie zonder kleurvariant), geldt voor elke variant.
 - **Aantallen** per waarde houden rekening met de andere actieve filters: u ziet wat een extra keuze oplevert. Waarden zonder resultaat verdwijnen. **Gekozen waarden verdwijnen nooit** (desnoods met aantal 0), dus u kunt ze altijd uitvinken.
-- **Een filter verschijnt alleen als hij de lijst kan verkleinen.** Een filter met één waarde die elk product heeft, verschijnt niet. Zo valt Type weg op `/catalogus/vloerbekleding/vinyl`.
+- **Een filter verschijnt alleen als hij de lijst kan verkleinen.** Een filter met één waarde die elk product heeft, verschijnt niet. Zo valt Type weg op `/catalogus/vloerbekleding/vinyl`. Een filter die na een keuze geen enkele waarde meer heeft, verdwijnt ook.
 - **Volgorde van waarden is stabiel.** Ze verspringt niet bij het filteren: vaste reeksen (kleurspectrum, lichtdoorlatendheid, klassen), anders meest voorkomend over de hele lijst of alfabetisch.
 - **Lange vrije lijsten** (meer dan 10 waarden: motief, stijl, merk…) krijgen een zoekveld en tonen eerst 8 waarden plus "Toon alle". Gekozen waarden blijven altijd zichtbaar. Vaste reeksen (kleur, klassen) staan altijd volledig.
 - **Actieve filters** staan als chips "Filter: waarde ×" boven de lijst, met "Alle filters wissen". In de lade staan "Alles wissen" en "Toon N producten".
@@ -46,7 +47,25 @@ Filteren gebeurt **op de server, op de volledige catalogus** (niet op de geladen
 - **Geschiedenis**: elke filter- of sorteerkeuze is een stap (de terugknop maakt hem ongedaan). "Meer tonen" niet. Sorteren of filteren zet de paginering terug op 1.
 - **Desktop**: de eerste zes filters van het profiel als knop, alle filters in "Alle filters". **Mobiel**: dezelfde filters in de lade, met dezelfde componenten en dezelfde logica.
 - **Lege lijst**: uitleg, "Filters aanpassen" (opent de lade) en "Alle filters wissen".
-- **Toegankelijkheid**: echte checkboxen met label, aantallen voor schermlezers ("12 producten"), focus terug naar de filterknop na Escape of "Klaar", lade met focusval. Lijststatus via `role=status`.
+- **Toegankelijkheid**: echte checkboxen met label, aantallen voor schermlezers ("12 producten"), focus terug naar de filterknop na Escape of "Klaar", lade met focusval. Lijststatus via `role=status`. Verdwijnt het element met de focus (een chip, een filter), dan gaat de focus naar "Alle filters". Na "meer tonen" krijgt het eerste nieuwe product de focus, zonder dat de pagina verspringt.
+
+## Toonvariant: wat de kaart toont
+
+Beeld, hoverbeeld, prijs, stalen en link van een kaart komen uit één variant, de **toonvariant**. Zo kunnen ze niet uiteenlopen.
+
+- **Zonder Kleur-, Maat-, Vorm- of Prijsfilter**: de standaardvariant (`standaardVariant` in `product.ts`), de eerste beschikbare variant, geen staal, met het beste eerste beeld. De productpagina opent op dezelfde variant, dus kaart en pagina tonen hetzelfde beeld. De prijs is de vanaf-prijs van het hele product.
+- **Met zo'n filter** (`metToonvariant` in `listing.ts`): de goedkoopste variant die aan alle gekozen filters voldoet, in de kleur met het beste beeld. De prijs komt van die kleur, "vanaf" enkel als die kleur meerdere prijzen heeft binnen de keuze. De link opent op die variant. Sorteren op prijs volgt de prijs op de kaart. De gekozen kleuren staan vooraan bij de stalen, want de kaart toont er maar vier.
+- **Lijst over één vorm** (Rond, Speciale vormen): de kaart toont de foto in die vorm en linkt naar een maat in die vorm.
+
+**Beeldvolgorde** (`FOTO_RANG`, overal dezelfde): productfoto of kleurstaal, overige foto's, details, sfeerfoto's, de rolfoto als laatste. Een sfeer- of rolfoto komt enkel eerst als die kleur niets anders heeft. Het soort foto komt uit de alt-tekst. Beauflor heeft geen labels maar zet het in de bestandsnaam: `_rsh_` = interieur, `_psh` = product. **Ongelabelde interieurs herkent de code niet**: die staan op de plaats van een gewone foto tot het label in Shopify staat.
+
+**Kleur van een foto**: de variantfoto, anders de alt-tekst (`… – kleur 110`, of de kleur als laatste deel: `Easytex Westbury – 162L`). Een optie "Breedte" is nooit een kleur.
+
+**Hoverbeeld**: enkel in de kleur van de kaart, liefst een sfeerfoto. Een foto zonder kleur enkel bij een product met één kleur. Anders geen hoverbeeld: liever de productfoto laten staan dan een andere kleur tonen. Die producten krijgen er een zodra hun sfeerfoto in Shopify aan een kleur hangt.
+
+**Voorraad**: de site belooft geen voorraad, want er is geen ERP gekoppeld en Shopify volgt ze niet. De kaart zegt "Online te bestellen", de productpagina, de optielade en de winkelmand zeggen niets. Ook de structured data laat `availability` weg (niet verplicht voor Google). Enkel "Tijdelijk uitverkocht" blijft, want dan kan bestellen echt niet. Komt er een ERP-koppeling, dan kan dit terug (TODO B01).
+
+**Submerken**: Desso valt onder Tarkett (`MERK_ONDER` in `src/data/merken.ts`). Merk, filter en kenmerken tonen Tarkett. Zoeken op "Desso" blijft werken en `?merk=desso` wordt `tarkett`. De URL's veranderen niet.
 
 ## Filtermatrix
 
@@ -79,7 +98,7 @@ Raamdecoratie heeft een profiel (Type, Kleur, Lichtdoorlatendheid, Materiaal, Pr
 **Volgorde (overal dezelfde regel):** Type en Kleur → de twee filters waarmee klanten van die afdeling het vaakst beginnen (behang: motief, stijl · vloer: look, rolbreedte · tapijt: maat, motief · stoffen: lichtdoorlatendheid, motief) → Prijs en Merk → technische filters → Eigenschappen als laatste. De keuze van de "eerste twee" is een inschatting. Herzien zodra GA4 filtergebruik meet.
 
 **Bewust geen filter:**
-- *Beschikbaarheid*: Shopify volgt geen voorraad, elke variant staat op "beschikbaar" (TODO B01). Etalageproducten heetten in de oude filter "Op maat", wat niet klopt.
+- *Beschikbaarheid*: Shopify volgt geen voorraad, elke variant staat op "beschikbaar" (TODO B01). Etalageproducten heetten in de oude filter "Op maat", wat niet klopt. Om dezelfde reden toont de site ook nergens "Op voorraad".
 - *Verkocht per*: de eenheid valt bij 374 producten terug op "Per stuk" (TODO B08), en het onderscheid zit al in Type.
 - *Patroonaansluiting*, *dikte*, *onderhoudsvoorschriften*: wel op de productpagina, te technisch voor een filter.
 
@@ -122,8 +141,8 @@ Niets hiervan is in Shopify aangepast. Het zijn voorstellen voor de pipeline (`p
 
 ## Beperkingen
 
-- **Kleur en maat gelden per product, niet per variant-combinatie.** "Grijs + 170–240 cm" vindt ook een tapijt dat grijs is in 160 × 230 en beige in 200 × 290. Per variant filteren vraagt variantniveau in de lijst (latere stap). De tellingen zijn wel exact voor de gekozen definitie.
-- **Prijsklassen mengen eenheden in gemengde lijsten** (m² vinyl naast vloerkleed per stuk). Binnen één afdeling speelt dat niet.
+- **Prijsklassen mengen eenheden** in gemengde lijsten (m² vinyl naast vloerkleed per stuk), en bij behang (per rol naast fotobehang per stuk).
+- **Hoverbeeld**: bij producten waarvan de sfeerfoto aan geen kleur hangt, is er geen hoverbeeld tot die koppeling in Shopify staat.
 - **Schaal**: filteren in het geheugen op de server haalt 75–150 ms per gefilterde lijst (productiebuild, 2.724 producten behang). Ruim voldoende tot tienduizenden producten. Daarboven: zoekindex (Meilisearch/Typesense), zoals voorzien in `architectuur.md`.
 - **Meertaligheid**: ID's in de URL zijn taalonafhankelijk. Labels staan nu in het Nederlands in het register en de normalisatie en moeten bij een tweede taal naar een woordenboek.
 
@@ -136,6 +155,10 @@ Niets hiervan is in Shopify aangepast. Het zijn voorstellen voor de pipeline (`p
 5. `pnpm --filter @brunic/prototype test:filters`: de matrix toont dekking en waarden, de tests controleren elke waarde.
 
 Een nieuwe afdeling: hoofdcategorie in `src/data/categories.ts` en een profiel met haar ID. Zonder profiel krijgt ze het gemengde.
+
+## Getest op 02/11/2026
+
+- `test:filters` (echte catalogus) kreeg controles die de uitkomst los van de code narekenen: elke prijsklasse en elke maat + prijs per variant, prijs op de kaart binnen de gekozen klasse, kaart volgt de kleurfilter, kaart en productpagina op hetzelfde beeld, sfeer- of rolfoto enkel eerst als er niets anders is, hover in de kleur van de kaart, geen lege filtergroepen, Breedte is geen kleur, Desso onder Tarkett, geen voorraad in de structured data.
 
 ## Getest op 24/10/2026
 
