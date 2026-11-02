@@ -46,7 +46,22 @@ const PRODUCTEN = [
   { map: "Hortensia", handle: "behang-hortensia-borastapeter" },
   { map: "Kamelia", handle: "behang-kamelia-borastapeter" },
   { map: "Shell Sand", handle: "behang-shell-sand-borastapeter" },
+  { map: "Angle", handle: "behang-angle-borastapeter" },
+  { map: "Sahara Moon", handle: "behang-sahara-moon-borastapeter" },
+  { map: "Mirage", handle: "behang-mirage-borastapeter" },
+  { map: "Samira", handle: "behang-samira-borastapeter" },
+  { map: "Arne Jacobsen Trapez", handle: "behang-arne-jacobsen-trapez-borastapeter" },
+  { map: "Venice", handle: "behang-venice-borastapeter" },
+  { map: "My Secret Garden", handle: "behang-my-secret-garden-borastapeter" },
+  { map: "Indigo Garden", handle: "behang-indigo-garden-borastapeter" },
+  { map: "Treasured Thistle", handle: "behang-treasured-thistle-borastapeter" },
 ];
+
+/**
+ * Foto die in de map van een andere kleur staat: Samira 38742 had geen eigen map. De muur op deze
+ * foto is warm beige, kleur 38743 is bijna wit, dus de bestandsnaam klopt (nagekeken 02/11/2026).
+ */
+const KLEUR_VAN_BESTAND = { "Samira/38743/38742_sfeerfoto.webp": "38742" };
 
 /** Nieuwe sfeerfoto → de bestaande foto waarvan ze de scherpere versie is (pixelvergelijking + visueel, 02/11/2026). */
 const VERVANGT = {
@@ -91,7 +106,8 @@ function nieuweFotos(product) {
       const soort = /sfeer/i.test(f) ? "sfeerfoto" : /prod/i.test(f) ? "productfoto" : null;
       if (!soort) throw new Error(`${product.map}/${kleur}/${f}: soort onbekend`);
       const buf = readFileSync(join(kmap, f));
-      uit.push({ kleur, f, soort, buf, hash: createHash("md5").update(buf).digest("hex").slice(0, 10), ...bestandstype(buf), sleutel: nfc(`${product.map}/${kleur}/${f}`) });
+      const sleutel = nfc(`${product.map}/${kleur}/${f}`);
+      uit.push({ kleur: KLEUR_VAN_BESTAND[sleutel] ?? kleur, f, soort, buf, hash: createHash("md5").update(buf).digest("hex").slice(0, 10), ...bestandstype(buf), sleutel });
     }
   }
   return uit;
@@ -109,11 +125,24 @@ async function haal(p) {
 
 const kleurVan = (v) => v.selectedOptions.find((o) => /kleur/i.test(o.name))?.value;
 
-/** Per kleur: productfoto, nieuwe sfeerfoto's, bestaande sfeerfoto's, de rest; rolfoto's helemaal achteraan. */
+/**
+ * Per kleur dezelfde volgorde als fotoRang op de site (productfoto, ongelabeld, detail, sfeerfoto), met
+ * de scherpere nieuwe sfeerfoto's voor de bestaande; rolfoto's helemaal achteraan. Een kleur met enkel een
+ * sfeerfoto schuift achter de kleuren met een vlak beeld: de kaart begint nooit met een sfeerfoto.
+ */
 function gewensteVolgorde(media, varianten, nieuwIds) {
-  const kleuren = [...new Set(varianten.map(kleurVan))];
   const isRol = (m) => /\s[–-]\s*rolfoto/i.test(m.alt ?? "");
-  const rang = (m) => (/\s[–-]\s*productfoto/i.test(m.alt ?? "") ? 0 : /\s[–-]\s*sfeerfoto/i.test(m.alt ?? "") ? (nieuwIds.has(m.id) ? 1 : 2) : 3);
+  const isSfeer = (m) => /\s[–-]\s*sfeerfoto/i.test(m.alt ?? "");
+  const opVariant = [...new Set(varianten.map(kleurVan))];
+  const heeftVlak = (k) => media.some((m) => kleurUitAlt(m.alt) === k && !isRol(m) && !isSfeer(m));
+  const kleuren = [...opVariant.filter(heeftVlak), ...opVariant.filter((k) => !heeftVlak(k))];
+  const rang = (m) => {
+    const alt = m.alt ?? "";
+    if (/\s[–-]\s*(productfoto|kleurstaal)/i.test(alt)) return 0;
+    if (isSfeer(m)) return nieuwIds.has(m.id) ? 3 : 3.5;
+    if (/\s[–-]\s*(detailfoto|hoekfoto)/i.test(alt)) return 2;
+    return 1;
+  };
   const volgens = (lijst) => lijst.map((m, i) => [m, i]).sort(([a, i], [b, j]) => rang(a) - rang(b) || i - j).map(([m]) => m);
   const uit = [];
   for (const k of kleuren) uit.push(...volgens(media.filter((m) => !isRol(m) && kleurUitAlt(m.alt) === k)));
@@ -249,10 +278,19 @@ for (const product of PRODUCTEN) {
       await wachtTotKlaar(p.id, new Set(r.productCreateMedia.media.map((m) => m.id)));
     }
 
-    // 4. Variantfoto = de productfoto van die kleur
+    // 4. Variantfoto = de productfoto van die kleur. Zonder productfoto: de eigen sfeerfoto, enkel als de
+    // variant nu een foto van een andere kleur toont (Samira 38742 toonde de detailfoto van 38743).
     if (fotos.length) {
       const productfoto = new Map(fotos.filter((x) => x.soort === "productfoto").map((x) => [x.kleur, nieuweIds.get(x.sleutel)]));
-      const lijst = p.variants.nodes.filter((v) => productfoto.get(kleurVan(v)) && v.media.nodes[0]?.id !== productfoto.get(kleurVan(v))).map((v) => ({ id: v.id, mediaId: productfoto.get(kleurVan(v)) }));
+      const eigenSfeer = new Map(fotos.filter((x) => x.soort === "sfeerfoto").reverse().map((x) => [x.kleur, nieuweIds.get(x.sleutel)]));
+      const altVan = new Map(media.map((m) => [m.id, m.alt]));
+      const doel = (v) => {
+        const k = kleurVan(v);
+        if (productfoto.get(k)) return productfoto.get(k);
+        const huidig = v.media.nodes[0]?.id;
+        return eigenSfeer.get(k) && (!huidig || kleurUitAlt(altVan.get(huidig)) !== k) ? eigenSfeer.get(k) : null;
+      };
+      const lijst = p.variants.nodes.filter((v) => doel(v) && v.media.nodes[0]?.id !== doel(v)).map((v) => ({ id: v.id, mediaId: doel(v) }));
       if (lijst.length) {
         const r = await admin(`mutation($p:ID!, $v:[ProductVariantsBulkInput!]!){ productVariantsBulkUpdate(productId:$p, variants:$v){ userErrors{ field message } } }`, { p: p.id, v: lijst });
         if (r.productVariantsBulkUpdate.userErrors.length) throw new Error(`variant: ${JSON.stringify(r.productVariantsBulkUpdate.userErrors)}`);
