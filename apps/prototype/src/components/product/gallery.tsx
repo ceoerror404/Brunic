@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ProductImage } from "@/lib/catalog/types";
+import { useHoudInBeeld, vergrendelPagina } from "@/lib/site/scroll";
 import { ImageSlot } from "@/components/ui/image-slot";
 import { Icon } from "@/components/ui/icon";
 
@@ -16,6 +17,7 @@ export function Gallery({ images, title, heleFoto = false }: { images: ProductIm
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [active, setActive] = useState(0);
   const strip = useRef<HTMLDivElement>(null);
+  const { ref: fotoKnop, onthoud } = useHoudInBeeld<HTMLButtonElement>();
 
   useEffect(() => {
     setActive(0);
@@ -76,7 +78,15 @@ export function Gallery({ images, title, heleFoto = false }: { images: ProductIm
         </div>
         {images.length > 5 && (
           <div className="mt-4 flex justify-center">
-            <button type="button" onClick={() => setShowAll((s) => !s)} className="btn btn-outline btn-sm">
+            <button
+              ref={fotoKnop}
+              type="button"
+              onClick={() => {
+                if (showAll) onthoud();
+                setShowAll(!showAll);
+              }}
+              className="btn btn-outline btn-sm"
+            >
               {showAll ? "Minder foto's tonen" : `Meer foto's tonen (${images.length - 5})`}
             </button>
           </div>
@@ -98,8 +108,7 @@ function Lightbox({ images, start, title, onClose }: { images: ProductImage[]; s
   }, [onClose]);
   useEffect(() => {
     const opener = document.activeElement;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const ontgrendel = vergrendelPagina();
     closeBtn.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeRef.current();
@@ -121,9 +130,9 @@ function Lightbox({ images, start, title, onClose }: { images: ProductImage[]; s
     };
     document.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      ontgrendel();
       document.removeEventListener("keydown", onKey);
-      if (opener instanceof HTMLElement) opener.focus();
+      if (opener instanceof HTMLElement) opener.focus({ preventScroll: true });
     };
   }, [images.length]);
 

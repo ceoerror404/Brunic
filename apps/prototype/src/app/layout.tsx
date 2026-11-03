@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Poppins } from "next/font/google";
 import { CartUiProvider } from "@/components/commerce/cart-ui";
+import { VloeiendeAnkers } from "@/components/ui/vloeiende-ankers";
 import { SITE } from "@/lib/site/config";
 import { BEELD } from "@/data/beelden";
 import "./globals.css";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="nl-BE" className={`${poppins.variable} ${fraunces.variable}`}>
       <body>
+        <VloeiendeAnkers />
         <CartUiProvider>{children}</CartUiProvider>
       </body>
     </html>

@@ -69,7 +69,7 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
         </p>
         {product.swatchTotal > 1 && (
           // Boven de kaartlink (z-10): een staal kiezen wisselt het beeld en de link naar die kleur.
-          <ul className="relative z-10 -my-1 ml-0 mt-0 flex items-center" aria-label={`Kleuren van ${product.title}`} role="list">
+          <ul className="relative z-10 -my-1 ml-0 mt-0 flex items-center max-[359px]:flex-wrap" aria-label={`Kleuren van ${product.title}`} role="list">
             {product.swatches.slice(0, 4).map((s) => (
               <li key={s.value}>
                 <button

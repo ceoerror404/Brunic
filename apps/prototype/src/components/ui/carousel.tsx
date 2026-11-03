@@ -48,12 +48,13 @@ export function Carousel({
   const scroll = (dir: 1 | -1) => {
     const el = track.current;
     if (!el) return;
-    el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
+    const rustig = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: rustig ? "auto" : "smooth" });
   };
 
   return (
     <div className="relative" role="region" aria-roledescription="carrousel" aria-label={label}>
-      <ul ref={track} tabIndex={focusableTrack ? 0 : undefined} className={`no-scrollbar flex snap-x snap-mandatory overflow-x-auto scroll-smooth ${gap}`}>
+      <ul ref={track} tabIndex={focusableTrack ? 0 : undefined} className={`no-scrollbar flex snap-x snap-mandatory overflow-x-auto motion-safe:scroll-smooth ${gap}`}>
         {children.map((child, i) => (
           <li key={i} className={`shrink-0 snap-start ${itemClassName}`}>
             {child}

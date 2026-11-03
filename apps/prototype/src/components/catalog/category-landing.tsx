@@ -83,7 +83,7 @@ export function CategoryLanding({
         ))}
       </section>
 
-      <section id="alle-producten" aria-labelledby="alle-producten-titel" className="mt-16 scroll-mt-[calc(var(--header-h,106px)+8px)]">
+      <section id="alle-producten" aria-labelledby="alle-producten-titel" className="mt-16">
         <h2 id="alle-producten-titel" className="section-title">
           Alle producten in {title.toLowerCase()}
         </h2>

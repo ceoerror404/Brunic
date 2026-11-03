@@ -45,13 +45,40 @@
 }
 
 @layer base {
+  :root {
+    /* Hoogte van de kleverige header vóór het laden; SiteHeader meet daarna de echte waarde. */
+    --header-h: 153px;
+  }
+  @media (min-width: 1024px) {
+    :root {
+      --header-h: 171px;
+    }
+  }
   html {
     -webkit-text-size-adjust: 100%;
-    /* De kleverige header verandert van hoogte; browser-scrollanchoring zou dan de
-       scrollpositie mee verschuiven en de header laten flikkeren. */
-    overflow-anchor: none;
+    /* Bewust geen scroll-behavior: smooth (animeert ook elke paginawissel en de terugknop, zie
+       components/ui/vloeiende-ankers.tsx) en geen scroll-padding (focus in de kleverige header of
+       filterbalk laat de pagina dan omhoog springen). */
+  }
+  /* Ankers en toetsenbordfocus landen onder de kleverige header; in een lijst ook onder de
+     kleverige filterbalk (--filterbalk-h, gezet door ProductListing). */
+  #inhoud,
+  :is(main, footer) :where(a, button, input, select, textarea, summary, [tabindex], [id]) {
+    scroll-margin-top: calc(var(--header-h) + 16px);
+  }
+  [data-lijst] :where(a, button, input, select, [tabindex]) {
+    scroll-margin-top: calc(var(--header-h) + var(--filterbalk-h, 0px) + 16px);
+  }
+  /* Wat zelf kleeft, staat al in beeld: een marge zou de pagina bij focus doen springen. */
+  @media (min-width: 1024px) {
+    .kleeft :where(a, button, input, select, textarea, summary, [tabindex], [id]) {
+      scroll-margin-top: 0;
+    }
   }
   body {
+    /* Geen browser-scrollanchoring (op body: op html heeft dit geen effect). De kleverige header
+       zou anders flikkeren, en een laat ingeladen formulier duwt de pagina voorbij het anker. */
+    overflow-anchor: none;
     background: #fff;
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -79,11 +106,6 @@
   :focus-visible {
     outline: 2px solid var(--focus-ring, var(--color-ink));
     outline-offset: 2px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    html {
-      scroll-behavior: smooth;
-    }
   }
 }
 
@@ -274,6 +296,18 @@
 @layer utilities {
   .on-dark {
     --focus-ring: #fff;
+  }
+  /* Kleverige elementen schuiven mee omhoog wanneer de header inklapt. Via één attribuut op
+     <html>: een CSS-variabele daar zou bij elke omklap de stijl van de hele pagina herberekenen. */
+  @media (min-width: 1024px) {
+    html[data-header-ingeklapt] .mee-met-header {
+      translate: 0 calc(var(--header-inklap-max, 0px) * -1);
+    }
+  }
+  /* Enkel zichtbaar terwijl de header uitgeklapt is, dus bij omhoog scrollen. */
+  html[data-header-ingeklapt] .verberg-bij-inklap {
+    opacity: 0;
+    visibility: hidden;
   }
   /* Overlay-verloop onderaan fototegels (leesbaarheid witte tekst) */
   .tile-shade {

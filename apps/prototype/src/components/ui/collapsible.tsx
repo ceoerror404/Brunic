@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useHoudInBeeld } from "@/lib/site/scroll";
 import { Icon } from "./icon";
 
 /**
@@ -12,6 +13,7 @@ export function Collapsible({ children, collapsedHeight = 260 }: { children: Rea
   const [needed, setNeeded] = useState(true);
   const inner = useRef<HTMLDivElement>(null);
   const id = useId();
+  const { ref: knop, onthoud } = useHoudInBeeld<HTMLButtonElement>();
 
   useEffect(() => {
     const el = inner.current;
@@ -32,8 +34,12 @@ export function Collapsible({ children, collapsedHeight = 260 }: { children: Rea
       </div>
       {needed && (
         <button
+          ref={knop}
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => {
+            if (open) onthoud();
+            setOpen(!open);
+          }}
           aria-expanded={open}
           aria-controls={id}
           className="mt-2 inline-flex items-center gap-2 border-b-2 border-ink py-2 text-[14px] font-medium"

@@ -27,7 +27,7 @@ export function ProductInfo({ product, category, maatwerk }: { product: Product;
       </section>
       )}
 
-      <section id="beschrijving" aria-labelledby="beschrijving-titel" className="scroll-mt-[calc(var(--header-h,106px)+16px)] px-2 pt-6">
+      <section id="beschrijving" aria-labelledby="beschrijving-titel" className="px-2 pt-6">
         <h2 id="beschrijving-titel" className="text-2xl font-medium">
           Beschrijving
         </h2>
@@ -46,7 +46,7 @@ export function ProductInfo({ product, category, maatwerk }: { product: Product;
         </Collapsible>
       </section>
 
-      <section id="kenmerken" aria-labelledby="kenmerken-titel" className="scroll-mt-[calc(var(--header-h,106px)+16px)] border-t border-line px-2 pt-8">
+      <section id="kenmerken" aria-labelledby="kenmerken-titel" className="border-t border-line px-2 pt-8">
         <h2 id="kenmerken-titel" className="text-2xl font-medium">
           Kenmerken & afmetingen
         </h2>

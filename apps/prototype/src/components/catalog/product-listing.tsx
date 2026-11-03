@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useLayoutEffect, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useOptimistic, useRef, useState, useTransition, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { ListingData } from "@/lib/catalog/listing";
 import { activeFilterCount, labelFor, PAGE_SIZE, serializeListState, SORTS, VARIANT_FACETS, type FacetGroup, type FacetLabelMap, type ListState, type SortKey } from "@/lib/catalog/filters";
 import { normalize } from "@/lib/catalog/search";
+import { useWielBinnen } from "@/lib/site/scroll";
 import { Drawer } from "@/components/ui/drawer";
 import { Icon } from "@/components/ui/icon";
 import { ProductCard } from "./product-card";
@@ -16,6 +17,31 @@ const LANGE_LIJST = 10;
 const EERST_ZICHTBAAR = 8;
 
 const headerHoogte = () => Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue("--header-h"), 10) || 106;
+
+const VERTREK = "brunic-lijst-vertrek";
+
+function schrijfVertrekpositie(y: number | null) {
+  try {
+    if (y === null) sessionStorage.removeItem(VERTREK);
+    else sessionStorage.setItem(VERTREK, JSON.stringify({ url: window.location.href, y }));
+  } catch {
+    /* geen sessionStorage (privémodus): de browser herstelt zelf zo goed als hij kan */
+  }
+}
+
+/** De positie van bij het vertrek, eenmalig: enkel als dit document net herladen of via "terug" geopend is, op dezelfde URL. */
+function leesVertrekpositie(): number | null {
+  try {
+    const opgeslagen = sessionStorage.getItem(VERTREK);
+    if (!opgeslagen) return null;
+    sessionStorage.removeItem(VERTREK);
+    const soort = (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type;
+    const { url, y } = JSON.parse(opgeslagen) as { url: string; y: number };
+    return (soort === "reload" || soort === "back_forward") && performance.now() < 15000 && url === window.location.href ? y : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Productlijst met filters, sortering en "meer laden" — dezelfde component voor elke lijst in
@@ -47,7 +73,7 @@ export function ProductListing({
   const [pending, startTransition] = useTransition();
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Na "meer tonen": het eerste nieuwe product en de scrollpositie, tot de nieuwe producten er zijn.
-  const focusVanaf = useRef<{ index: number; scrollY: number } | null>(null);
+  const focusVanaf = useRef<{ index: number; scrollY: number; gescrold?: boolean } | null>(null);
   // Na een filter of sortering: naar het begin van de lijst zodra de nieuwe producten er zijn.
   const naarBegin = useRef(false);
 
@@ -105,17 +131,73 @@ export function ProductListing({
     };
   }, []);
 
+  // De toetsenbordfocus in de lijst houdt rekening met de kleverige filterbalk (desktop): anders
+  // valt de focus erachter (scroll-margin in globals.css). Verandert enkel als de balk zelf verandert.
+  const balk = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = balk.current;
+    const lijst = el?.parentElement;
+    if (!el || !lijst) return;
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const meet = () => {
+      if (desktop.matches) lijst.style.setProperty("--filterbalk-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+      else lijst.style.removeProperty("--filterbalk-h");
+    };
+    const ro = new ResizeObserver(meet);
+    ro.observe(el);
+    meet();
+    return () => ro.disconnect();
+  }, []);
+
   // Na "meer tonen": focus naar het eerste nieuwe product (toetsenbordgebruikers), pas als het er is.
   // De pagina blijft staan waar de klant was: de browser houdt anders de knop in beeld (scroll
   // anchoring) en de klant slaat 48 producten over. Vóór het tekenen, dus zonder zichtbare sprong.
+  // Scrolde de klant tijdens het laden verder, dan trekken we hem niet terug.
   const raster = useRef<HTMLUListElement>(null);
   useLayoutEffect(() => {
     const vanaf = focusVanaf.current;
     if (vanaf === null || shown.length <= vanaf.index) return;
     focusVanaf.current = null;
     raster.current?.querySelector<HTMLAnchorElement>(`[data-kaart="${vanaf.index}"] h3 a`)?.focus({ preventScroll: true });
-    window.scrollTo({ top: vanaf.scrollY, behavior: "instant" });
+    if (!vanaf.gescrold) window.scrollTo({ top: vanaf.scrollY, behavior: "instant" });
   }, [shown.length]);
+  useEffect(() => {
+    const onScroll = () => {
+      const vanaf = focusVanaf.current;
+      if (vanaf && Math.abs(window.scrollY - vanaf.scrollY) > 1) vanaf.gescrold = true;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // De browser herstelt de scrollpositie soms te vroeg en dan niet meer: bij "terug" na het herladen
+  // van de productpagina (die is korter), en bij het herladen van de lijst zelf (de lijst komt
+  // gestreamd binnen). De positie wordt dan afgekapt; zodra de lijst er is, zetten we de klant goed.
+  // Bij een klik naar een product: bewaard bij deze stap in de geschiedenis.
+  const bewaarPositie = (e: ReactMouseEvent) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (e.target instanceof Element && e.target.closest("a[href]")) window.history.replaceState({ ...window.history.state, lijstY: window.scrollY }, "");
+  };
+  useLayoutEffect(() => {
+    const { lijstY, ...rest } = (window.history.state ?? {}) as { lijstY?: number };
+    const y = typeof lijstY === "number" ? lijstY : leesVertrekpositie();
+    if (typeof lijstY === "number") window.history.replaceState(rest, "");
+    if (y !== null && Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: "instant" });
+  }, []);
+  // Bij het verlaten van de pagina (herladen, de kassa): in sessionStorage, want Chrome negeert
+  // history.replaceState tijdens pagehide. Terug uit de bfcache staat de pagina nog goed.
+  useEffect(() => {
+    const opVertrek = () => schrijfVertrekpositie(window.scrollY);
+    const opTerugkeer = (e: PageTransitionEvent) => {
+      if (e.persisted) schrijfVertrekpositie(null);
+    };
+    window.addEventListener("pagehide", opVertrek);
+    window.addEventListener("pageshow", opTerugkeer);
+    return () => {
+      window.removeEventListener("pagehide", opVertrek);
+      window.removeEventListener("pageshow", opTerugkeer);
+    };
+  }, []);
 
   // Na een filter of sortering staat de klant anders midden in de nieuwe lijst, of bij een korte
   // lijst onder de footer. Staat het begin al in beeld, dan blijft de pagina staan. Vóór het tekenen.
@@ -135,17 +217,23 @@ export function ProductListing({
     if (el && !el.isConnected && document.activeElement === document.body) alleFilters.current?.focus({ preventScroll: true });
   }, [groups, state]);
 
+  // Lade dicht en de opener is onzichtbaar geworden (de mobiele filterknop na een filter): focus naar "Alle filters".
+  const ladeWasOpen = useRef(false);
+  useEffect(() => {
+    if (ladeWasOpen.current && !drawerOpen && document.activeElement === document.body) alleFilters.current?.focus({ preventScroll: true });
+    ladeWasOpen.current = drawerOpen;
+  }, [drawerOpen]);
+
   return (
-    <div>
+    <div data-lijst="">
       <div ref={meetpunt} aria-hidden="true" />
       {/* Filterbalk */}
       <div
+        ref={balk}
         onFocus={(e) => {
           laatsteFocus.current = e.target;
         }}
-        className={`z-30 bg-white py-3 transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-[var(--header-h,106px)] ${
-          vast ? "lg:-translate-y-[var(--header-inklap,0px)]" : ""
-        }`}
+        className={`kleeft z-30 bg-white py-3 transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-[var(--header-h,106px)] ${vast ? "mee-met-header" : ""}`}
       >
         <div className="flex flex-wrap items-center gap-2">
           <div className="hidden flex-wrap items-center gap-2 lg:flex">
@@ -249,7 +337,7 @@ export function ProductListing({
           ))
         ) : (
           // Op mobiel twee kolommen (B22): één kaart per rij gaf ±440 px per product.
-          <ul ref={raster} role="list" className="mt-4 grid grid-cols-2 gap-x-2 gap-y-4 sm:gap-x-3 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-5">
+          <ul ref={raster} role="list" onClickCapture={bewaarPositie} className="mt-4 grid grid-cols-2 gap-x-2 gap-y-4 sm:gap-x-3 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-5">
             {shown.map((p, i) => (
               <FragmentWithPromo key={p.id} index={i} promo={promo && activeCount === 0 && i === 8 ? promo : null}>
                 <li data-kaart={i}>
@@ -261,6 +349,25 @@ export function ProductListing({
           </ul>
         )}
       </div>
+
+      {/* Mobiel kleeft de filterbalk niet. Bij omhoog scrollen komt de filterknop onderaan in beeld;
+          aan het einde van de lijst rust hij in de witruimte onder het raster. Hoogte 0: schuift niets op. */}
+      {total > 0 && (
+        <div className={`sticky bottom-[60px] z-20 h-0 lg:hidden ${vast ? "" : "invisible"}`}>
+          <div className="verberg-bij-inklap pointer-events-none absolute inset-x-0 top-0 flex justify-center transition-[opacity,visibility] duration-150 motion-reduce:transition-none">
+            <button type="button" onClick={() => setDrawerOpen(true)} className="btn btn-primary btn-sm pointer-events-auto gap-2 shadow-[var(--shadow-pop)]" aria-haspopup="dialog">
+              <Icon name="filter" size={18} />
+              Filters
+              {activeCount > 0 && (
+                <span className="flex size-5 items-center justify-center rounded-full bg-white text-[11px] text-ink">
+                  {activeCount}
+                  <span className="sr-only"> actief</span>
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Meer laden (referentie: "Vous avez vu 49 produits sur 49") */}
       {total > 0 && (
@@ -440,11 +547,13 @@ function FacetDropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const knop = useRef<HTMLButtonElement>(null);
+  const paneel = useRef<HTMLDivElement>(null);
   const id = useId();
+  useWielBinnen(paneel, open);
   // Sluiten met Escape of "Klaar": de focus gaat terug naar de filterknop (anders valt ze weg met het paneel).
   const sluit = useCallback(() => {
     setOpen(false);
-    knop.current?.focus();
+    knop.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
@@ -482,12 +591,13 @@ function FacetDropdown({
       </button>
       {open && (
         <div
+          ref={paneel}
           id={id}
           role="group"
           aria-label={group.def.label}
           className="absolute left-0 top-[calc(100%+6px)] z-40 w-[300px] rounded-[var(--radius-tile)] bg-white p-3 shadow-[var(--shadow-pop)] ring-1 ring-line"
         >
-          <div className="max-h-[320px] overflow-y-auto">
+          <div className="max-h-[320px] overflow-y-auto overscroll-contain">
             <FacetOptions group={group} selected={selected} onToggle={onToggle} />
           </div>
           <div className="flex justify-between border-t border-line pt-3">

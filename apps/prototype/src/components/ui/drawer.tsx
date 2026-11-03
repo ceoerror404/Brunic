@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { vergrendelPagina } from "@/lib/site/scroll";
 import { Icon } from "./icon";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
@@ -40,8 +41,7 @@ export function Drawer({
   useEffect(() => {
     if (!open) return;
     opener.current = document.activeElement;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const ontgrendel = vergrendelPagina();
     const t = window.setTimeout(() => panel.current?.focus(), 10);
 
     const onKey = (e: KeyboardEvent) => {
@@ -72,9 +72,9 @@ export function Drawer({
     document.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(t);
-      document.body.style.overflow = prevOverflow;
+      ontgrendel();
       document.removeEventListener("keydown", onKey);
-      if (opener.current instanceof HTMLElement) opener.current.focus();
+      if (opener.current instanceof HTMLElement) opener.current.focus({ preventScroll: true });
     };
   }, [open]);
 

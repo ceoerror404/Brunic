@@ -13,7 +13,8 @@ export async function ShopChrome({ children }: { children: ReactNode }) {
   return (
     <>
       <SiteHeader menu={menu} nav={nav} />
-      <main id="inhoud" tabIndex={-1} className="outline-none">
+      {/* Minimaal één scherm hoog: de lijst komt gestreamd binnen, de footer staat er anders even in beeld en springt weg. */}
+      <main id="inhoud" tabIndex={-1} className="min-h-[calc(100dvh-var(--header-h))] outline-none">
         {children}
       </main>
       <SiteFooter />

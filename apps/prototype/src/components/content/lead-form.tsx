@@ -255,9 +255,9 @@ export function LeadForm({
             />
             <label
               htmlFor={`${id}-fotos`}
-              className="btn btn-outline btn-sm cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"
+              className="btn btn-outline btn-sm cursor-pointer whitespace-normal peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink"
             >
-              Foto&apos;s van uw ramen of ruimte toevoegen <Icon name="paperclip" size={18} />
+              Foto&apos;s van uw ramen of ruimte toevoegen <Icon name="paperclip" size={18} className="shrink-0" />
             </label>
             <p className="mt-2 text-[13px] text-ink-60">
               {fotos.length > 0 ? `${fotos.length} foto${fotos.length === 1 ? "" : "'s"} gekozen: ${fotos.map((f) => f.name).join(", ")}` : `Optioneel, max. ${MAX_FOTOS} foto's.`}

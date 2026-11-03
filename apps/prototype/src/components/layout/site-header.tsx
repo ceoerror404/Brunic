@@ -19,8 +19,9 @@ const BOVENAAN_PX = 40;
 
 /**
  * Header zoals de referentie: servicebalk · logo + groot zoekveld + winkeliconen ·
- * navigatierij met "Catalogus"-knop (megamenu). Blijft bovenaan kleven; de
- * navigatierij klapt weg bij naar beneden scrollen en komt terug bij omhoog scrollen.
+ * navigatierij met "Catalogus"-knop (megamenu). Blijft bovenaan kleven: servicebalk en logorij
+ * blijven altijd staan; de navigatierij (mobiel: het zoekveld) klapt weg bij naar beneden
+ * scrollen en komt terug bij omhoog scrollen.
  */
 export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) {
   const pathname = usePathname();
@@ -55,7 +56,7 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
       const y = window.scrollY;
       const delta = y - last;
       last = y;
-      // Vóór de vergrendeling: anders blijft de band weg na snel terugscrollen naar de top.
+      // Vóór de vergrendeling: anders blijft de navigatierij weg na snel terugscrollen naar de top.
       if (y < BOVENAAN_PX) return set(false);
       if (performance.now() < lockedUntil) return;
       travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
@@ -69,15 +70,17 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
   // Hoogtes als CSS-variabelen (B10/B21):
   // --header-h            volle hoogte; verandert nooit bij scrollen, dus kleverige elementen
   //                       (filterbalk, productkolom) en de inhoud verspringen niet;
-  // --header-inklap-max   wat er bij inklappen visueel wegschuift (servicebalk + zoek-/navrij);
-  // --header-inklap       0 of --header-inklap-max: kleverige elementen schuiven mee via transform.
+  // --header-inklap-max   wat er bij inklappen visueel wegschuift (zoek-/navrij);
+  //                       kleverige elementen schuiven zoveel mee via .mee-met-header (globals.css).
   useEffect(() => {
     const header = headerRef.current;
     const rij1 = rij1Ref.current;
     if (!header || !rij1) return;
     const meet = () => {
-      const vol = Math.round(header.getBoundingClientRect().height);
-      const rest = Math.round(rij1.getBoundingClientRect().height);
+      const kop = header.getBoundingClientRect();
+      const vol = Math.round(kop.height);
+      // Wat altijd blijft staan: alles tot en met de logorij (servicebalk + rij 1).
+      const rest = Math.round(rij1.getBoundingClientRect().bottom - kop.top);
       document.documentElement.style.setProperty("--header-h", `${vol}px`);
       document.documentElement.style.setProperty("--header-inklap-max", `${Math.max(0, vol - rest)}px`);
     };
@@ -97,7 +100,7 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setMegaOpen(false);
-        catalogBtn.current?.focus();
+        catalogBtn.current?.focus({ preventScroll: true });
       }
     };
     document.addEventListener("mousedown", onDown);
@@ -111,14 +114,15 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
   const isActive = (href: string) =>
     href === routes.catalog() ? pathname.startsWith("/catalogus") || pathname.startsWith("/product") : pathname.startsWith(href);
 
-  // Ingeklapt = enkel de logorij zichtbaar. Met het megamenu open blijft alles staan.
+  // Ingeklapt = enkel servicebalk en logorij zichtbaar. Met het megamenu open blijft alles staan.
   const ingeklapt = collapsed && !megaOpen;
   useEffect(() => {
-    document.documentElement.style.setProperty("--header-inklap", ingeklapt ? "var(--header-inklap-max, 0px)" : "0px");
+    document.documentElement.toggleAttribute("data-header-ingeklapt", ingeklapt);
   }, [ingeklapt]);
+  useEffect(() => () => document.documentElement.removeAttribute("data-header-ingeklapt"), []);
 
   // De header neemt altijd zijn volle hoogte in (niets eronder verspringt). Bij inklappen
-  // schuiven servicebalk en zoek-/navigatierij met een transform weg achter de logorij;
+  // schuift de zoek-/navigatierij met een transform weg achter de logorij;
   // het lege stuk eronder laat klikken door (pointer-events-none) naar de pagina.
   const verborgen = ingeklapt ? "invisible -translate-y-full" : "pointer-events-auto";
   return (
@@ -126,7 +130,7 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
       <a href="#inhoud" className="sr-only-focusable pointer-events-auto absolute left-4 top-2 z-[60] rounded-full bg-ink px-4 py-2 text-white">
         Naar de inhoud
       </a>
-      <div className={`transition-transform duration-200 motion-reduce:transition-none ${ingeklapt ? "-translate-y-[30px]" : ""}`}>
+      <div>
         <div className="pointer-events-auto">
           <ServiceBar />
         </div>

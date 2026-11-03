@@ -81,7 +81,7 @@ export default async function ServicePage({ params }: Props) {
         </ol>
       </section>
 
-      <div className="mt-14 grid gap-10 lg:grid-cols-[1fr_minmax(0,560px)]">
+      <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)]">
         <section aria-labelledby="meer-info" className="prose-brunic">
           <h2 id="meer-info" className="!mt-0">
             Meer over {service.title.toLowerCase()}
@@ -107,7 +107,7 @@ export default async function ServicePage({ params }: Props) {
           </p>
         </section>
 
-        <div id="aanvraag" className="scroll-mt-[calc(var(--header-h,106px)+16px)]">
+        <div id="aanvraag">
           <Suspense>
             <LeadForm
               title={isOpmeting ? "Vraag uw gratis opmeting of offerte aan" : "Vraag uw afspraak aan"}

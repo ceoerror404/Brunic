@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { MenuNode } from "@/lib/catalog/menu";
 import { productCount } from "@/lib/catalog/product";
 import { routes } from "@/lib/routes";
+import { useWielBinnen } from "@/lib/site/scroll";
 import { Icon } from "@/components/ui/icon";
 import { ImageSlot } from "@/components/ui/image-slot";
 
@@ -18,12 +19,14 @@ import { ImageSlot } from "@/components/ui/image-slot";
 export function MegaMenu({ menu, onNavigate, metAanbiedingen = false }: { menu: MenuNode[]; onNavigate: () => void; metAanbiedingen?: boolean }) {
   const [activeId, setActiveId] = useState<string>(menu[0]?.id ?? "");
   const active = menu.find((m) => m.id === activeId) ?? menu[0];
+  const paneel = useRef<HTMLDivElement>(null);
+  useWielBinnen(paneel);
 
   return (
     // Escape wordt in de header afgehandeld (sluiten + focus terug naar de Catalogus-knop).
     <div id="megamenu" className="absolute left-0 right-0 top-full z-40 pt-1">
       <div className="shell">
-        <div className="flex min-h-[440px] overflow-hidden rounded-b-[var(--radius-tile)] rounded-tr-[var(--radius-tile)] bg-white shadow-[var(--shadow-pop)] ring-1 ring-line">
+        <div ref={paneel} className="flex min-h-[440px] overflow-hidden rounded-b-[var(--radius-tile)] rounded-tr-[var(--radius-tile)] bg-white shadow-[var(--shadow-pop)] ring-1 ring-line">
           {/* Kolom 1: afdelingen */}
           <div className="flex w-[280px] shrink-0 flex-col border-r border-line bg-cloud/60">
             <ul className="p-2" role="list">

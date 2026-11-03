@@ -39,7 +39,7 @@ export default function StorePage() {
       <Breadcrumbs items={[{ label: "Winkel & contact" }]} />
       <div className="mx-auto max-w-[1040px]">
         {/* Banner (referentie: "Besoin d'aide ?") */}
-        <section id="hulp" aria-labelledby="hulp-titel" className="relative mt-2 scroll-mt-[calc(var(--header-h,106px)+16px)] overflow-hidden rounded-[6px] bg-[linear-gradient(100deg,#e21f1d_0%,#ef3b33_45%,#f7696f_100%)] text-white">
+        <section id="hulp" aria-labelledby="hulp-titel" className="relative mt-2 overflow-hidden rounded-[6px] bg-[linear-gradient(100deg,#e21f1d_0%,#ef3b33_45%,#f7696f_100%)] text-white">
           <div className="relative z-10 px-8 py-10 md:px-14 md:py-14">
             <h1 id="hulp-titel" className="font-display text-[40px] font-semibold leading-tight [font-variation-settings:'SOFT'_100,'WONK'_0] md:text-[56px]">
               Hulp nodig?
@@ -140,7 +140,7 @@ export default function StorePage() {
           </div>
         </section>
 
-        <div id="formulier" className="mt-12 scroll-mt-[calc(var(--header-h,106px)+16px)]">
+        <div id="formulier" className="mt-12">
           <Suspense>
             <LeadForm
               title="Stel uw vraag"

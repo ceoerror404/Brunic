@@ -28,7 +28,8 @@ export default function CheckoutLayout({ children }: { children: React.ReactNode
           </ul>
         </div>
       </header>
-      <main id="inhoud" tabIndex={-1} className="outline-none">
+      {/* De kassa heeft geen kleverige header. */}
+      <main id="inhoud" tabIndex={-1} className="outline-none [--header-h:0px]">
         {children}
       </main>
       {/* Zoals de referentie: geen volledige footer in de kassa, enkel een juridische regel. */}

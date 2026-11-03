@@ -176,7 +176,7 @@ export function ProductView({
         </div>
 
         <aside className="[grid-area:buy]" aria-label="Bestellen">
-          <div className="transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-[calc(var(--header-h,106px)+16px)] lg:-translate-y-[var(--header-inklap,0px)]">
+          <div className="kleeft mee-met-header transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:top-[calc(var(--header-h,106px)+16px)]">
             {/* Bovenregel: merk · type · collectie; de productnaam is de hoofdtitel (B15). */}
             <p className="text-[13px] font-medium uppercase tracking-wide text-ink-60">
               {[product.brand ?? "Brunic", product.facets.type?.[0]].filter(Boolean).join(" · ")}
@@ -302,24 +302,26 @@ export function ProductView({
             </div>
 
             <p className="mt-5 text-[14px] text-ink-60">Art.nr. {variant.sku}</p>
-
-            {lineHref && lineCount > 1 && (
-              <div className="mt-6 flex items-center justify-between gap-4">
-                <p className="text-xl font-medium">Collectie {product.line}</p>
-                <Link href={lineHref} className="btn btn-outline btn-sm">
-                  Alles bekijken <Icon name="chevronRight" size={16} />
-                </Link>
-              </div>
-            )}
           </div>
         </aside>
 
-        <div className="min-w-0 [grid-area:info]">{info}</div>
+        <div className="min-w-0 [grid-area:info]">
+          {/* Buiten de kleverige kolom: op een laptopscherm viel dit daar onderaan buiten beeld. */}
+          {lineHref && lineCount > 1 && (
+            <div className="mb-6 flex items-center justify-between gap-4 px-2">
+              <p className="text-xl font-medium">Collectie {product.line}</p>
+              <Link href={lineHref} className="btn btn-outline btn-sm">
+                Alles bekijken <Icon name="chevronRight" size={16} />
+              </Link>
+            </div>
+          )}
+          {info}
+        </div>
       </div>
 
       {/* Kleverige bestelbalk (referentie: onderaan gecentreerd) */}
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-4 py-3 backdrop-blur transition-transform duration-200 lg:inset-x-auto lg:bottom-4 lg:left-1/2 lg:-translate-x-1/2 lg:rounded-[var(--radius-pill)] lg:border lg:px-3 lg:py-2 lg:shadow-[var(--shadow-pop)] ${
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-4 py-3 backdrop-blur transition-transform duration-200 motion-reduce:transition-none lg:inset-x-auto lg:bottom-4 lg:left-1/2 lg:-translate-x-1/2 lg:rounded-[var(--radius-pill)] lg:border lg:px-3 lg:py-2 lg:shadow-[var(--shadow-pop)] ${
           stickyVisible ? "translate-y-0" : "pointer-events-none translate-y-[150%]"
         }`}
         aria-hidden={!stickyVisible}
