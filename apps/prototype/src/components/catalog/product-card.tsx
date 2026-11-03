@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { CardProduct } from "@/lib/catalog/view";
 import { routes } from "@/lib/routes";
 import { cdnWidth } from "@/lib/catalog/cdn";
+import { toonHeleFoto } from "@/lib/catalog/product";
 import { ImageSlot } from "@/components/ui/image-slot";
 import { WishlistButton } from "@/components/commerce/wishlist-button";
 import { Price } from "./price";
@@ -21,7 +22,10 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
   const [color, setColor] = useState<string | null>(null);
   const chosen = product.swatches.find((s) => s.value === color);
   const badge = product.badges.includes("aanbieding") ? "aanbieding" : product.badges.includes("nieuw") ? "nieuw" : product.badges[0];
-  const img = chosen?.image ?? (hover && product.hoverImage ? product.hoverImage : product.image);
+  const toontHover = !chosen?.image && hover && Boolean(product.hoverImage);
+  const img = chosen?.image ?? (toontHover ? product.hoverImage : product.image);
+  // De hoverfoto is een sfeerbeeld: die mag het kader vullen.
+  const heel = toonHeleFoto(product.type) && !toontHover;
   const extra = product.swatchTotal - product.swatches.length;
 
   return (
@@ -36,6 +40,8 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
           alt={img?.alt || product.title}
           priority={priority}
           tone={tone}
+          fit={heel ? "contain" : "cover"}
+          imgClassName={heel ? "p-0!" : ""}
           sizes="(min-width: 1280px) 20vw, (min-width: 768px) 33vw, 50vw"
           className="aspect-[4/3] w-full rounded-[var(--radius-tile)]"
         />

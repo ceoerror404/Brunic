@@ -10,6 +10,8 @@ export type NavItem = {
   accent?: "offer";
   /** Enkel tonen als er producten met een actieprijs zijn (anders een lege pagina). */
   alleenMetAanbiedingen?: boolean;
+  /** Enkel in het mobiele menu: op desktop staat dezelfde bestemming al in de logorij. */
+  enkelMobiel?: boolean;
 };
 
 /**
@@ -23,7 +25,7 @@ export const MAIN_NAV: NavItem[] = [
   { key: "merken", label: "Merken", href: routes.brands() },
   { key: "op-maat", label: "Op maat & plaatsing", href: routes.services() },
   { key: "inspiratie", label: "Inspiratie & advies", href: routes.inspiration() },
-  { key: "winkel", label: "Winkel & contact", href: routes.store() },
+  { key: "winkel", label: "Winkel & contact", href: routes.store(), enkelMobiel: true },
 ];
 
 export type FooterColumn = { title: string; links: { label: string; href: string }[] };

@@ -11,6 +11,7 @@ import {
   isPurchasable,
   lineTotal,
   standaardVariant,
+  toonHeleFoto,
   UNIT_NAME,
   variantById,
   variantLabel,
@@ -171,7 +172,7 @@ export function ProductView({
     <>
       <div className="grid grid-cols-1 gap-x-10 gap-y-6 [grid-template-areas:'gallery'_'buy'_'info'] lg:grid-cols-[minmax(0,1fr)_400px] lg:[grid-template-areas:'gallery_buy'_'info_buy'] xl:grid-cols-[minmax(0,1fr)_432px] xl:gap-x-12">
         <div className="[grid-area:gallery]">
-          <Gallery images={images} title={product.title} />
+          <Gallery images={images} title={product.title} heleFoto={toonHeleFoto(product.facets.type?.[0])} />
         </div>
 
         <aside className="[grid-area:buy]" aria-label="Bestellen">

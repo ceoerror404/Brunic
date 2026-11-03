@@ -143,12 +143,16 @@ function vormVanMaat(maat: string): string | undefined {
  * die belofte waar. Ze staan als kenmerk (brunic.specificaties) en als tabelrij in de beschrijving.
  */
 const IS_LEVERBELOFTE = /^lever(tijd|termijn)$/i;
-const LEVERBELOFTE_RIJ = /<tr[^>]*>(?:(?!<\/tr>)[\s\S])*?lever(?:tijd|termijn)(?:(?!<\/tr>)[\s\S])*?<\/tr>/gi;
+/**
+ * Een tabel in de beschrijving herhaalt de kenmerken (ook de levertermijn) en zou als platte
+ * tekst één lopende zin worden. Alle rijen staan letterlijk in brunic.specificaties.
+ */
+const TABEL = /<table\b[\s\S]*?<\/table>/gi;
 
 /** HTML-beschrijving → platte alinea's (geen HTML van buitenaf in de pagina). */
 function htmlNaarTekst(html: string): string {
   return html
-    .replace(LEVERBELOFTE_RIJ, "")
+    .replace(TABEL, "")
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
     .replace(/<li[^>]*>/gi, "• ")

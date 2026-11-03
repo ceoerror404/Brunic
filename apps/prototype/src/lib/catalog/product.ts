@@ -92,6 +92,9 @@ export function imagesForVariant(p: Product, v: Variant | undefined): ProductIma
 /** De optie die de kleur draagt. */
 export const kleurOptie = (p: Product) => p.options.find((o) => /kleur|color|colour/i.test(o.name));
 
+/** Bij een vloerkleed is de vorm het product: de foto (meestal staand) past heel in het kader, zonder uitsnede. */
+export const toonHeleFoto = (type: string | undefined) => type === "Vloerkleed";
+
 /**
  * Het hoverbeeld van een kaart: een foto in dezelfde kleur, liefst een sfeerfoto. Een foto zonder kleur
  * mag enkel bij een product met één kleur: bij meer kleuren is niet zeker welke kleur erop staat.

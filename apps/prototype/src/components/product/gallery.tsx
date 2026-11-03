@@ -9,9 +9,9 @@ import { Icon } from "@/components/ui/icon";
 /**
  * Productgalerij zoals de referentie: desktop = groot beeld + raster van 2 kolommen
  * (met "Meer foto's tonen"), mobiel = swipebare strook met stippen. Klik opent een
- * lightbox (pijltjestoetsen + Escape).
+ * lightbox (pijltjestoetsen + Escape). `heleFoto`: elke foto past heel in haar kader, ook de eerste.
  */
-export function Gallery({ images, title }: { images: ProductImage[]; title: string }) {
+export function Gallery({ images, title, heleFoto = false }: { images: ProductImage[]; title: string; heleFoto?: boolean }) {
   const [showAll, setShowAll] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [active, setActive] = useState(0);
@@ -43,7 +43,7 @@ export function Gallery({ images, title }: { images: ProductImage[]; title: stri
         >
           {images.map((img, i) => (
             <button key={`${img.src}-${i}`} type="button" onClick={() => setLightbox(i)} className="w-full shrink-0 snap-center" aria-label={`Foto ${i + 1} van ${images.length} vergroten`}>
-              <ImageSlot src={img.src} alt={img.alt || title} priority={i === 0} className="aspect-[4/3] w-full bg-white" />
+              <ImageSlot src={img.src} alt={img.alt || title} priority={i === 0} fit={heleFoto ? "contain" : "cover"} className="aspect-[4/3] w-full bg-white" />
             </button>
           ))}
         </div>
@@ -69,7 +69,7 @@ export function Gallery({ images, title }: { images: ProductImage[]; title: stri
                 className={`overflow-hidden rounded-[var(--radius-tile)] border border-line bg-white ${big ? "col-span-2" : ""}`}
                 aria-label={`Foto ${i + 1} van ${images.length} vergroten`}
               >
-                <ImageSlot src={img.src} alt={img.alt || title} priority={i === 0} fit={i === 0 ? "cover" : "contain"} className={big ? "aspect-[4/3] w-full" : "aspect-square w-full"} />
+                <ImageSlot src={img.src} alt={img.alt || title} priority={i === 0} fit={i === 0 && !heleFoto ? "cover" : "contain"} className={big ? "aspect-[4/3] w-full" : "aspect-square w-full"} />
               </button>
             );
           })}

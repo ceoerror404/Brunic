@@ -14,6 +14,9 @@ import { MegaMenu } from "./mega-menu";
 import { MobileMenu } from "./mobile-menu";
 import { Logo } from "./logo";
 
+/** Tot hier blijft de header volledig staan. Laag genoeg om één muiswielstap (± 100 px) te laten volstaan. */
+const BOVENAAN_PX = 40;
+
 /**
  * Header zoals de referentie: servicebalk · logo + groot zoekveld + winkeliconen ·
  * navigatierij met "Catalogus"-knop (megamenu). Blijft bovenaan kleven; de
@@ -52,8 +55,9 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
       const y = window.scrollY;
       const delta = y - last;
       last = y;
+      // Vóór de vergrendeling: anders blijft de band weg na snel terugscrollen naar de top.
+      if (y < BOVENAAN_PX) return set(false);
       if (performance.now() < lockedUntil) return;
-      if (y < 140) return set(false);
       travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
       if (travel > 48) set(true);
       else if (travel < -48) set(false);
@@ -172,7 +176,7 @@ export function SiteHeader({ menu, nav }: { menu: MenuNode[]; nav: NavItem[] }) 
           <nav aria-label="Hoofdnavigatie" className="shell">
             <div className="flex h-[64px] items-center justify-between gap-4">
               <ul className="flex items-center gap-1" role="list">
-                {nav.map((item) =>
+                {nav.filter((item) => !item.enkelMobiel).map((item) =>
                   item.mega ? (
                     <li key={item.key} className="flex items-center">
                       <button

@@ -81,9 +81,11 @@ export function ProductInfo({ product, category, maatwerk }: { product: Product;
                 </dl>
               ) : (
                 <p className="mt-3 text-[15px] text-ink-60">
-                  {product.pricing === "on-request"
-                    ? "Op maat: wij bepalen de afmetingen samen met u, bij een opmeting aan huis of in de winkel."
-                    : "Zie de gekozen uitvoering."}
+                  {product.pricing !== "on-request"
+                    ? "Zie de gekozen uitvoering."
+                    : isOpMaat(maatwerk)
+                      ? "Op maat: wij bepalen de afmetingen samen met u, bij een opmeting aan huis of in de winkel."
+                      : "De afmetingen en de hoeveelheid die u nodig hebt, bekijken we graag samen met u in onze winkel."}
                 </p>
               )}
             </div>

@@ -19,7 +19,7 @@ const { buildListing } = await imp("lib/catalog/listing.ts");
 const F = await imp("lib/catalog/filters.ts");
 const N = await imp("lib/catalog/facet-normalisatie.ts");
 const { filterProfiel, FILTERPROFIEL_GEMENGD } = await imp("data/filterprofielen.ts");
-const { imagesForVariant, standaardVariant, fotoTrede } = await imp("lib/catalog/product.ts");
+const { imagesForVariant, standaardVariant, fotoTrede, toonHeleFoto } = await imp("lib/catalog/product.ts");
 const { compactSrc } = await imp("lib/catalog/cdn.ts");
 const { searchProducts } = await imp("lib/catalog/search.ts");
 const { productJsonLd } = await imp("lib/site/seo.ts");
@@ -491,6 +491,18 @@ check("geen levertermijnen: geen ERP, dus geen belofte", () => {
     assert.ok(!labels.some((l) => /^lever(tijd|termijn)$/i.test(l.trim())), `${p.slug}: ${labels.join(", ")}`);
     assert.ok(!/levertermijn|levertijd\s*\d/i.test(p.description), `${p.slug}: staat nog in de beschrijving`);
   }
+});
+check("beschrijving: geen tabel als lopende zin, en nooit leeg door het weghalen van de tabel", () => {
+  for (const p of products) {
+    assert.ok(!/Slijtlaag\s+\d[\d,.]*\s*mm\s+\S/i.test(p.description), `${p.slug}: tabel staat nog in de beschrijving`);
+    assert.ok(!/<\/?(table|tr|td)\b/i.test(p.description), `${p.slug}: tabel-HTML in de beschrijving`);
+  }
+});
+check("vloerkleden tonen de hele foto, andere producten niet", () => {
+  const vloerkleden = products.filter((p) => toonHeleFoto(p.facets.type?.[0]));
+  assert.ok(vloerkleden.length > 100, `${vloerkleden.length} vloerkleden`);
+  for (const p of vloerkleden) assert.equal(toListingItem(p).type, "Vloerkleed", p.slug);
+  assert.ok(!toonHeleFoto("Behang") && !toonHeleFoto("Gordijnstof") && !toonHeleFoto(undefined));
 });
 
 check("kaart en productpagina openen op hetzelfde beeld", () => {

@@ -15,6 +15,8 @@ const NO_LABELS: FacetLabelMap = {};
 const LANGE_LIJST = 10;
 const EERST_ZICHTBAAR = 8;
 
+const headerHoogte = () => Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue("--header-h"), 10) || 106;
+
 /**
  * Productlijst met filters, sortering en "meer laden" — dezelfde component voor elke lijst in
  * de winkel. De toestand leeft in de URL (deelbaar, terugknop werkt). Filteren, tellen en
@@ -46,10 +48,13 @@ export function ProductListing({
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Na "meer tonen": het eerste nieuwe product en de scrollpositie, tot de nieuwe producten er zijn.
   const focusVanaf = useRef<{ index: number; scrollY: number } | null>(null);
+  // Na een filter of sortering: naar het begin van de lijst zodra de nieuwe producten er zijn.
+  const naarBegin = useRef(false);
 
   const update = useCallback(
     (next: Partial<ListState>, resetPage = true) => {
       if (resetPage) focusVanaf.current = null;
+      naarBegin.current = resetPage;
       const merged: ListState = { ...state, ...next, page: resetPage ? 1 : (next.page ?? state.page) };
       // Andere parameters (?q=, ?weergave=) blijven staan. Gelezen bij de klik en niet via
       // useSearchParams: zo blijft de lijst in de server-HTML (geen client-side bailout).
@@ -88,7 +93,7 @@ export function ProductListing({
     let io: IntersectionObserver | undefined;
     const start = () => {
       io?.disconnect();
-      const h = Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue("--header-h"), 10) || 106;
+      const h = headerHoogte();
       io = new IntersectionObserver(([e]) => setVast(!e.isIntersecting && e.boundingClientRect.top < h + 1), { rootMargin: `-${h + 1}px 0px 0px 0px` });
       io.observe(el);
     };
@@ -111,6 +116,15 @@ export function ProductListing({
     raster.current?.querySelector<HTMLAnchorElement>(`[data-kaart="${vanaf.index}"] h3 a`)?.focus({ preventScroll: true });
     window.scrollTo({ top: vanaf.scrollY, behavior: "instant" });
   }, [shown.length]);
+
+  // Na een filter of sortering staat de klant anders midden in de nieuwe lijst, of bij een korte
+  // lijst onder de footer. Staat het begin al in beeld, dan blijft de pagina staan. Vóór het tekenen.
+  useLayoutEffect(() => {
+    if (!naarBegin.current) return;
+    naarBegin.current = false;
+    const boven = (meetpunt.current?.getBoundingClientRect().top ?? 0) - headerHoogte();
+    if (boven < 0) window.scrollBy({ top: boven, behavior: "instant" });
+  }, [data]);
 
   // Verdwijnt het element met de focus (een chip, een filter zonder waarden meer), dan gaat de focus
   // naar "Alle filters" in plaats van verloren.
