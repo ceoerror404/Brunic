@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
 import type { ListingData } from "@/lib/catalog/listing";
-import { activeFilterCount, labelFor, PAGE_SIZE, serializeListState, SORTS, type FacetGroup, type FacetLabelMap, type ListState, type SortKey } from "@/lib/catalog/filters";
+import { activeFilterCount, labelFor, PAGE_SIZE, serializeListState, SORTS, VARIANT_FACETS, type FacetGroup, type FacetLabelMap, type ListState, type SortKey } from "@/lib/catalog/filters";
 import { normalize } from "@/lib/catalog/search";
 import { Drawer } from "@/components/ui/drawer";
 import { Icon } from "@/components/ui/icon";
@@ -239,8 +239,8 @@ export function ProductListing({
             {shown.map((p, i) => (
               <FragmentWithPromo key={p.id} index={i} promo={promo && activeCount === 0 && i === 8 ? promo : null}>
                 <li data-kaart={i}>
-                  {/* Andere toonvariant = nieuwe kaart: een gekozen staal van de vorige filter blijft niet hangen. */}
-                  <ProductCard key={p.variantId ?? ""} product={p} priority={i < 4} tone={i} />
+                  {/* Andere Kleur-, Maat-, Vorm- of Prijsfilter = nieuwe kaart: een gekozen staal van de vorige filter blijft niet hangen. */}
+                  <ProductCard key={VARIANT_FACETS.map((k) => data.state.selection[k]?.join(",") ?? "").join("|")} product={p} priority={i < 4} tone={i} />
                 </li>
               </FragmentWithPromo>
             ))}

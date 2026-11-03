@@ -35,6 +35,9 @@ export const fotoRang = (i: ProductImage) => FOTO_RANG[i.soort ?? "overig"];
 /** 0 = mag vooraan staan, 1 = sfeerfoto, 2 = rolfoto. Sfeer- en rolfoto's komen enkel eerst als er niets anders is. */
 export const fotoTrede = (i: ProductImage) => (i.soort === "rol" ? 2 : i.soort === "sfeer" ? 1 : 0);
 
+/** Vormen die een eigen foto kunnen hebben (de variantfoto van die maat). */
+export const BIJZONDERE_VORM = new Set(["Rond", "Organisch", "Loper"]);
+
 export const isStaal = (v: Variant) => Object.values(v.options).some((w) => /staal/i.test(w));
 
 export function isPurchasable(p: Product, v?: Variant): boolean {

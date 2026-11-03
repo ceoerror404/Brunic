@@ -363,7 +363,135 @@ for (const [rootId, naam] of Object.entries(ROOTS)) {
     const k = L({ kleur: "grijs" }).items[0];
     for (const veld of ["varianten", "kleuren", "standaardId", "facets", "vormen", "createdAt", "popularity"]) assert.ok(!(veld in k), veld);
   });
+
+  // Audit 02/11/2026, R4-01 tot R4-05: kaart, staal en productpagina komen uit dezelfde variant.
+  const opties = (key) => L({}).groups.find((g) => g.def.key === key)?.options.map((o) => o.value) ?? [];
+  const lijstKeuzes = [
+    ...["maat", "vorm", "prijs", "kleur"].flatMap((key) => opties(key).filter((w) => w !== "op-aanvraag").map((w) => ({ [key]: w }))),
+    ...opties("maat").flatMap((m) => opties("merk").map((merk) => ({ maat: m, merk }))),
+    ...opties("maat").flatMap((m) => opties("kleur").map((kleur) => ({ maat: m, kleur }))),
+  ];
+  const vormLijsten = [["Rond"], ["Organisch"]].flatMap(([vorm]) => [{}, ...opties("maat").map((maat) => ({ maat })), ...opties("kleur").map((kleur) => ({ kleur }))].map((keuze) => ({ keuze, vorm })));
+  const alleKaarten = [
+    ...lijstKeuzes.flatMap((keuze) => L({ ...keuze, pagina: "999" }).items.map((k) => ({ k, keuze }))),
+    ...vormLijsten.flatMap(({ keuze, vorm }) => buildListing(items, { ...keuze, pagina: "999" }, {}, vorm, filterProfiel("c03")).items.map((k) => ({ k, keuze, vorm }))),
+  ];
+  const perId = new Map(tapijten.map((p) => [p.id, p]));
+  const variantVan = (p, id) => (id ? p.variants.find((x) => x.id === id) : standaardVariant(p));
+  const beeldVan = (p, v) => {
+    const kleur = v.options.Kleur;
+    const heeftBeeld = !kleur || p.images.some((i) => !i.optionValue || i.optionValue === kleur);
+    const eerste = heeftBeeld ? imagesForVariant(p, v)[0] : undefined;
+    return eerste ? compactSrc(eerste.src) : undefined;
+  };
+
+  check("toonvariant: kaart en staal tonen het eerste beeld van de productpagina", () => {
+    assert.ok(alleKaarten.length > 5000, `${alleKaarten.length} kaarten`);
+    for (const { k } of alleKaarten) {
+      const p = perId.get(k.id);
+      const verwacht = beeldVan(p, variantVan(p, k.variantId));
+      if (verwacht) assert.equal(k.image?.src, verwacht, `${k.slug}: kaartbeeld`);
+      for (const s of k.swatches) {
+        const sv = beeldVan(p, variantVan(p, s.variantId));
+        if (sv) assert.equal(s.image?.src, sv, `${k.slug} ${s.value}: staalbeeld`);
+      }
+    }
+  });
+  check("toonvariant: na een klik op een staal klopt de prijs met de pagina (R4-01)", () => {
+    for (const { k } of alleKaarten) {
+      const p = perId.get(k.id);
+      for (const s of k.swatches) {
+        const v = variantVan(p, s.variantId);
+        const getoond = s.price !== undefined ? s.price : k.price;
+        if (v.price) assert.equal(getoond?.amount.amount, v.price.amount.amount, `${k.slug} ${s.value}: kaart € ${getoond?.amount.amount}, pagina € ${v.price.amount.amount}`);
+      }
+    }
+  });
+  check("toonvariant: het staal van de kaartkleur opent op dezelfde variant als de kaart", () => {
+    for (const { k } of alleKaarten) {
+      const p = perId.get(k.id);
+      const v = variantVan(p, k.variantId);
+      const s = k.swatches.find((x) => x.value === v.options.Kleur);
+      if (!s) continue;
+      assert.equal(s.variantId, v.id, `${k.slug}: staal ${s.variantId}, kaart ${v.id}`);
+      assert.equal(s.price, undefined, `${k.slug}: staal van de kaartkleur met een andere prijs`);
+    }
+  });
+  check("toonvariant: zonder vormkeuze een gewone maat als die aan de filter voldoet (R4-02)", () => {
+    const BIJZONDER = new Set(["Rond", "Organisch", "Loper"]);
+    for (const { k, keuze, vorm } of alleKaarten) {
+      if (vorm || keuze.vorm) continue;
+      const p = perId.get(k.id);
+      const v = variantVan(p, k.variantId);
+      if (!BIJZONDER.has(v.vorm)) continue;
+      const it = items.find((x) => x.id === k.id);
+      const actief = F.actieveVariantFilters(Object.fromEntries(Object.entries(keuze).map(([a, b]) => [a, [b]])));
+      const gewoon = it.varianten.filter((x) => x.kleur === v.options.Kleur && F.variantVoldoet(x.waarden, actief) && !BIJZONDER.has(x.vorm) && !x.staal && x.availability !== "uitverkocht");
+      assert.equal(gewoon.length, 0, `${k.slug}: ${v.vorm} terwijl een gewone maat bestaat`);
+    }
+  });
+  check("toonvariant: een sfeerfoto komt ook met een filter enkel eerst als die kleur niets anders heeft (R4-04)", () => {
+    for (const { k } of alleKaarten) {
+      const p = perId.get(k.id);
+      const v = variantVan(p, k.variantId);
+      const eerste = p.images.find((i) => compactSrc(i.src) === k.image?.src);
+      if (!eerste || fotoTrede(eerste) === 0) continue;
+      assert.ok(!imagesForVariant(p, v).some((i) => fotoTrede(i) < fotoTrede(eerste)), `${k.slug}: ${eerste.soort} terwijl er een betere foto is`);
+    }
+  });
+  check("toonvariant: de vormfoto enkel als de variant die vorm echt heeft (R4-05)", () => {
+    for (const { k, vorm } of alleKaarten) {
+      if (!vorm) continue;
+      const p = perId.get(k.id);
+      const v = variantVan(p, k.variantId);
+      const eerste = p.images.find((i) => compactSrc(i.src) === k.image?.src);
+      if (eerste?.vorm) assert.equal(eerste.vorm, v.vorm, `${k.slug}: foto ${eerste.vorm}, variant ${v.vorm}`);
+    }
+  });
+  check("toonvariant: hover in de kleur van de kaart, nooit hetzelfde beeld", () => {
+    for (const { k } of alleKaarten) {
+      if (!k.hoverImage) continue;
+      assert.notEqual(k.hoverImage.src, k.image?.src, `${k.slug}: hover = kaartbeeld`);
+      const p = perId.get(k.id);
+      const v = variantVan(p, k.variantId);
+      if ((p.options.find((o) => o.name === "Kleur")?.values.length ?? 0) <= 1) continue;
+      const hover = p.images.find((i) => compactSrc(i.src) === k.hoverImage.src);
+      assert.equal(hover?.optionValue, v.options.Kleur, `${k.slug}: kaart ${v.options.Kleur}, hover ${hover?.optionValue}`);
+    }
+  });
 }
+
+check("stalen: de vlakke foto van die kleur, een bolletje enkel zonder vlakke foto", () => {
+  let foto = 0;
+  for (const p of products) {
+    for (const o of p.options) {
+      if (!/kleur|color|colour/i.test(o.name)) continue;
+      for (const w of o.values) {
+        const vlak = p.images.find((i) => i.optionValue === w.value && fotoTrede(i) === 0);
+        if (!vlak) continue;
+        foto++;
+        assert.ok(w.swatch?.startsWith("url("), `${p.slug} ${w.value}: ${w.swatch}`);
+        assert.ok(w.swatch.includes(vlak.src.split("?")[0]), `${p.slug} ${w.value}: staal is niet de eerste vlakke foto`);
+      }
+    }
+  }
+  assert.ok(foto > 5000, `${foto} stalen met een foto`);
+});
+check("stalen: de kaart volgt hetzelfde: geen bolletje naast een vlakke foto", () => {
+  for (const p of products) {
+    for (const s of toListingItem(p).swatches) {
+      if (!s.swatch || s.swatch.startsWith("url(")) continue;
+      assert.ok(!p.images.some((i) => i.optionValue === s.value && fotoTrede(i) === 0), `${p.slug} ${s.value}: bolletje terwijl er een vlakke foto is`);
+    }
+  }
+});
+check("geen levertermijnen: geen ERP, dus geen belofte", () => {
+  for (const p of products) {
+    const labels = [...p.specs, ...p.dimensions].map((s) => s.label);
+    assert.ok(!labels.some((l) => /^lever(tijd|termijn)$/i.test(l.trim())), `${p.slug}: ${labels.join(", ")}`);
+    assert.ok(!/levertermijn|levertijd\s*\d/i.test(p.description), `${p.slug}: staat nog in de beschrijving`);
+  }
+});
 
 check("kaart en productpagina openen op hetzelfde beeld", () => {
   for (const p of products) {

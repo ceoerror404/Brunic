@@ -2,7 +2,7 @@
  * Compacte weergavemodellen voor kaarten en lijsten. De server mapt een volledig
  * Product naar deze vorm; zo krijgen client-componenten enkel wat ze tonen/filteren.
  */
-import type { Availability, ImageRef, Price, Product, ProductBadge, Variant } from "./types";
+import type { Availability, ImageRef, Price, Product, ProductBadge } from "./types";
 import { fotoTrede, hasPriceRange, hoverVoor, imagesForVariant, isStaal, kleurOptie, lowestPrice, standaardVariant } from "./product";
 import { derivedFacetValues, variantWaarden, type VariantWaarden } from "./filters";
 import { ancestry, type CategoryTree } from "./tree";
@@ -27,15 +27,22 @@ export type CardProduct = {
   price: Price | null;
   fromPrice: boolean;
   availability: Availability;
-  /** Kleurkeuze op de kaart: staal, bijhorend beeld en variant (voor de link naar de PDP). */
-  swatches: { value: string; swatch?: string; image?: ImageRef; variantId?: string }[];
+  /** Kleurkeuze op de kaart: staal, en wat de kaart toont als dat staal gekozen is. */
+  swatches: CardSwatch[];
   /** Totaal aantal kleuren (de kaart toont er max. 4 + "+N"). */
   swatchTotal: number;
-  /**
-   * Foto's per bijzondere vorm (Rond, Organisch, Loper): in een lijst van ronde tapijten toont de
-   * kaart het ronde tapijt. Enkel op de server; buildListing haalt het weg voor de browser.
-   */
-  vormen?: Record<string, { image?: ImageRef; perKleur: Record<string, ImageRef> }>;
+};
+
+export type CardSwatch = {
+  value: string;
+  /** Een bolletje, als de kleur geen vlakke foto heeft. Anders toont de kaart `image` als staal. */
+  swatch?: string;
+  image?: ImageRef;
+  /** De variant achter dit staal: de link opent daarop. */
+  variantId?: string;
+  /** De prijs bij dit staal. Enkel meegestuurd als die verschilt van de prijs op de kaart. */
+  price?: Price | null;
+  fromPrice?: boolean;
 };
 
 /** Subcategorieën waar de kaart de foto in die vorm toont (id = "s-" + Shopify-handle). */
@@ -53,15 +60,13 @@ export type VariantKaart = {
   price: Price | null;
   availability: Availability;
   staal: boolean;
-};
-
-/** Wat een kaart toont in één kleur (enkel op de server). */
-export type KleurKaart = {
-  staal: CardProduct["swatches"][number];
+  /** Het eerste beeld op de productpagina van deze variant en het hoverbeeld daarbij. */
   beeld?: ImageRef;
   hover?: ImageRef;
-  /** Hoe goed het eerste beeld is: 0 = bruikbaar, 1 = sfeerfoto, 2 = rolfoto (fotoTrede). */
+  /** Hoe goed dat beeld is: 0 = bruikbaar, 1 = sfeerfoto, 2 = rolfoto, 3 = geen beeld (fotoTrede). */
   trede: number;
+  /** Het beeld toont de bijzondere vorm van deze variant. */
+  beeldInVorm: boolean;
 };
 
 export type ListingItem = CardProduct & {
@@ -69,33 +74,89 @@ export type ListingItem = CardProduct & {
   createdAt: string;
   popularity: number;
   varianten: VariantKaart[];
-  kleuren: KleurKaart[];
+  kleuren: CardSwatch[];
   standaardId?: string;
 };
 
 const AVAIL_RANK: Availability[] = ["op-voorraad", "beperkt", "op-bestelling", "uitverkocht"];
 
-/** De variant die een kleur vertegenwoordigt: beschikbaar en geen staal, als dat kan. */
-function variantVanKleur(varianten: Variant[]): Variant | undefined {
-  return varianten.find((v) => v.availability !== "uitverkocht" && !isStaal(v)) ?? varianten.find((v) => v.availability !== "uitverkocht") ?? varianten[0];
+/** Liefst beschikbaar en geen staal. */
+export function liefstVerkoopbaar(lijst: VariantKaart[]): VariantKaart[] {
+  const beschikbaar = lijst.filter((v) => v.availability !== "uitverkocht");
+  const verkoopbaar = beschikbaar.filter((v) => !v.staal);
+  return verkoopbaar.length ? verkoopbaar : beschikbaar.length ? beschikbaar : lijst;
 }
 
-/** Per kleur van het product: staal, kaartbeeld en hoverbeeld. */
-function kleurKaarten(p: Product): KleurKaart[] {
+const bedrag = (v: VariantKaart) => v.price?.amount.amount ?? Infinity;
+
+/** De goedkoopste variant uit een lijst, en of "vanaf" erbij hoort. Bij gelijke prijs of op aanvraag: de eerste. */
+export function goedkoopste(lijst: VariantKaart[]): { variant: VariantKaart; vanaf: boolean } {
+  const prijzen = new Set(lijst.map((v) => v.price?.amount.amount).filter((a) => a !== undefined));
+  return { variant: lijst.reduce((a, b) => (bedrag(b) < bedrag(a) ? b : a)), vanaf: prijzen.size > 1 };
+}
+
+const zelfdePrijs = (a: Price | null, b: Price | null) => a?.amount.amount === b?.amount.amount && a?.compareAt?.amount === b?.compareAt?.amount;
+
+/**
+ * Prijs op een staal, enkel als die iets anders zegt dan de kaart: er staan 48 kaarten per pagina,
+ * en bij de meeste producten kost elke kleur evenveel.
+ */
+export function staalPrijs(prijs: Price | null, vanaf: boolean, kaartPrijs: Price | null, kaartVanaf: boolean): Pick<CardSwatch, "price" | "fromPrice"> {
+  const getoond = prijs ?? kaartPrijs;
+  return zelfdePrijs(getoond, kaartPrijs) && vanaf === kaartVanaf ? {} : { price: getoond, fromPrice: vanaf };
+}
+
+/** Per variant wat de kaart toont: eerste beeld en hoverbeeld, zoals de productpagina. Veel varianten delen ze. */
+function variantKaarten(p: Product): VariantKaart[] {
+  const ko = kleurOptie(p);
+  const waarden = variantWaarden(p);
+  const gedeeld = new Map<string, Pick<VariantKaart, "beeld" | "hover" | "trede">>();
+  return p.variants.map((v, i) => {
+    const kleur = ko ? v.options[ko.name] : undefined;
+    // Geen eigen en geen gedeeld beeld: niet terugvallen op een foto van een andere kleur.
+    const heeftBeeld = !ko || p.images.some((x) => !x.optionValue || x.optionValue === kleur);
+    const eerste = heeftBeeld ? imagesForVariant(p, v)[0] : undefined;
+    const sleutel = `${kleur ?? ""}|${eerste?.src ?? ""}`;
+    let beelden = gedeeld.get(sleutel);
+    if (!beelden) {
+      beelden = { beeld: img(eerste), hover: img(hoverVoor(p, kleur, eerste), false), trede: eerste ? fotoTrede(eerste) : 3 };
+      gedeeld.set(sleutel, beelden);
+    }
+    return {
+      id: v.id,
+      ...(kleur !== undefined ? { kleur } : {}),
+      ...(v.vorm ? { vorm: v.vorm } : {}),
+      waarden: waarden[i],
+      price: v.price,
+      availability: v.availability,
+      staal: isStaal(v),
+      ...beelden,
+      beeldInVorm: Boolean(eerste?.vorm && eerste.vorm === v.vorm),
+    };
+  });
+}
+
+/** Per kleur van het product: het staal en wat de kaart toont als dat staal gekozen is. */
+function kleurStalen(p: Product, varianten: VariantKaart[]): CardSwatch[] {
   const ko = kleurOptie(p);
   if (!ko) return [];
+  const standaard = standaardVariant(p);
+  const kaartPrijs = lowestPrice(p);
+  const kaartVanaf = hasPriceRange(p);
   return ko.values.map((waarde) => {
-    const variant = variantVanKleur(p.variants.filter((x) => x.options[ko.name] === waarde.value));
-    // Geen eigen en geen gedeeld beeld: niet terugvallen op een foto van een andere kleur.
-    const heeftBeeld = p.images.some((i) => !i.optionValue || i.optionValue === waarde.value);
-    const eerste = variant && heeftBeeld ? imagesForVariant(p, variant)[0] : undefined;
+    const keuze = liefstVerkoopbaar(varianten.filter((v) => v.kleur === waarde.value));
+    // De kleur van de kaart opent op dezelfde variant als de kaart.
+    const variant = keuze.find((v) => v.id === standaard?.id) ?? keuze[0];
+    const beeld = variant?.beeld;
     // Staal = kleurcode of (meestal) het kleurbeeld zelf: dan niet dubbel meesturen, de kaart leidt het af.
-    const swatch = waarde.swatch?.startsWith("url(") && eerste ? undefined : waarde.swatch;
+    const swatch = waarde.swatch?.startsWith("url(") && beeld ? undefined : waarde.swatch;
+    const { variant: laagste, vanaf } = keuze.length ? goedkoopste(keuze) : { variant: undefined, vanaf: false };
     return {
-      staal: { value: waarde.value, ...(swatch ? { swatch } : {}), image: img(eerste, false), variantId: variant?.id },
-      beeld: img(eerste),
-      hover: img(hoverVoor(p, waarde.value, eerste), false),
-      trede: eerste ? fotoTrede(eerste) : 3,
+      value: waarde.value,
+      ...(swatch ? { swatch } : {}),
+      image: beeld ? { src: beeld.src, alt: "" } : undefined,
+      variantId: variant?.id,
+      ...(laagste ? staalPrijs(laagste.price, vanaf, kaartPrijs, kaartVanaf) : {}),
     };
   });
 }
@@ -106,15 +167,7 @@ export function toCard(p: Product): CardProduct {
   const standaard = standaardVariant(p);
   const kaart = imagesForVariant(p, standaard)[0];
   const ko = kleurOptie(p);
-  const vormen: NonNullable<CardProduct["vormen"]> = {};
-  for (const v of new Set(p.images.map((i) => i.vorm).filter((x): x is string => Boolean(x)))) {
-    const metVorm = p.images.filter((i) => i.vorm === v);
-    const perKleur: Record<string, ImageRef> = {};
-    for (const i of metVorm) if (i.optionValue && !perKleur[i.optionValue]) perKleur[i.optionValue] = img(i, false)!;
-    vormen[v] = { image: img(metVorm[0]), perKleur };
-  }
   return {
-    ...(Object.keys(vormen).length ? { vormen } : {}),
     id: p.id,
     slug: p.slug,
     title: p.title,
@@ -131,39 +184,32 @@ export function toCard(p: Product): CardProduct {
     swatchTotal: color?.values.length ?? 0,
     // De kleur van de kaart altijd vooraan: de kaart toont maar vier stalen.
     swatches: color
-      ? kleurKaarten(p)
-          .sort((a, b) => Number(b.staal.value === standaard?.options[color.name]) - Number(a.staal.value === standaard?.options[color.name]))
-          .slice(0, 4)
-          .map((k) => k.staal)
+      ? [...lijstGegevens(p).kleuren].sort((a, b) => Number(b.value === standaard?.options[color.name]) - Number(a.value === standaard?.options[color.name])).slice(0, 4)
       : [],
   };
 }
 
 /** Variant- en kleurgegevens per product één keer berekenen: de lijsten vragen ze bij elke aanvraag. */
-const LIJST_GEGEVENS = new WeakMap<Product, Pick<ListingItem, "varianten" | "kleuren" | "standaardId"> & { kaart: CardProduct }>();
+const LIJST_GEGEVENS = new WeakMap<Product, Pick<ListingItem, "varianten" | "kleuren" | "standaardId">>();
+const KAARTEN = new WeakMap<Product, CardProduct>();
 
 function lijstGegevens(p: Product) {
   let g = LIJST_GEGEVENS.get(p);
   if (!g) {
-    const ko = kleurOptie(p);
-    const waarden = variantWaarden(p);
-    g = {
-      kaart: toCard(p),
-      varianten: p.variants.map((v, i) => ({
-        id: v.id,
-        ...(ko ? { kleur: v.options[ko.name] } : {}),
-        ...(v.vorm ? { vorm: v.vorm } : {}),
-        waarden: waarden[i],
-        price: v.price,
-        availability: v.availability,
-        staal: isStaal(v),
-      })),
-      kleuren: kleurKaarten(p),
-      standaardId: standaardVariant(p)?.id,
-    };
+    const varianten = variantKaarten(p);
+    g = { varianten, kleuren: kleurStalen(p, varianten), standaardId: standaardVariant(p)?.id };
     LIJST_GEGEVENS.set(p, g);
   }
   return g;
+}
+
+function kaartVan(p: Product): CardProduct {
+  let k = KAARTEN.get(p);
+  if (!k) {
+    k = toCard(p);
+    KAARTEN.set(p, k);
+  }
+  return k;
 }
 
 /**
@@ -177,9 +223,9 @@ export function toListingItem(p: Product, tree?: CategoryTree): ListingItem {
   }
   // Lege filterwaarden niet meesturen (lange lijsten: elke byte telt × duizenden producten).
   for (const k of Object.keys(facets)) if (facets[k].length === 0) delete facets[k];
-  const { kaart, varianten, kleuren, standaardId } = lijstGegevens(p);
+  const { varianten, kleuren, standaardId } = lijstGegevens(p);
   return {
-    ...kaart,
+    ...kaartVan(p),
     facets,
     createdAt: p.createdAt,
     popularity: p.popularity,

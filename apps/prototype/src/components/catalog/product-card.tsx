@@ -57,7 +57,7 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
             {product.title}
           </Link>
         </h3>
-        <Price card={product} className="mt-0.5" />
+        <Price card={chosen?.price !== undefined ? { ...product, price: chosen.price, fromPrice: chosen.fromPrice ?? false } : product} className="mt-0.5" />
         <p className={`text-xs ${product.pricing === "fixed" && product.availability === "uitverkocht" ? "text-brand-dark" : "text-ink-60"}`}>
           {product.pricing === "on-request" ? "Advies en offerte in de winkel" : product.availability === "uitverkocht" ? "Tijdelijk uitverkocht" : "Online te bestellen"}
         </p>
@@ -83,7 +83,7 @@ export function ProductCard({ product, priority = false, tone = 0 }: { product: 
             ))}
             {extra > 0 && (
               <li>
-                <Link href={routes.product(product.slug)} className="relative z-10 px-1 text-xs text-ink-80 hover:underline" aria-label={`Nog ${extra} kleuren bekijken`}>
+                <Link href={routes.product(product.slug, chosen?.variantId ?? product.variantId)} className="relative z-10 px-1 text-xs text-ink-80 hover:underline" aria-label={`Nog ${extra} kleuren bekijken`}>
                   +{extra}
                 </Link>
               </li>

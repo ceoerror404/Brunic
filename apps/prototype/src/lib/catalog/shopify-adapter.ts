@@ -14,7 +14,7 @@ import type { Category, CategoryId, FotoSoort, Price, Product, ProductImage, Pro
 import { eenProductPerOntwerp } from "./ontwerpen";
 import { kleurStaal } from "./filters";
 import { facettenUitSpecs, maatKlassen, normaliseerFacetten, rolbreedtes } from "./facet-normalisatie";
-import { FOTO_RANG } from "./product";
+import { BIJZONDERE_VORM, FOTO_RANG, fotoTrede } from "./product";
 
 export const SNAPSHOT_PAD = path.join(process.cwd(), ".data", "shopify-catalogus.json");
 
@@ -137,12 +137,18 @@ function vormVanMaat(maat: string): string | undefined {
   if (m) return m[1] === m[2] ? "Vierkant" : "Rechthoekig";
   return undefined;
 }
-/** Vormen die een eigen foto kunnen hebben (de variantfoto van die maat). */
-const BIJZONDERE_VORM = new Set(["Rond", "Organisch", "Loper"]);
+
+/**
+ * Levertermijnen uit de leveranciersdata tonen we niet: er is geen ERP gekoppeld, dus niets maakt
+ * die belofte waar. Ze staan als kenmerk (brunic.specificaties) en als tabelrij in de beschrijving.
+ */
+const IS_LEVERBELOFTE = /^lever(tijd|termijn)$/i;
+const LEVERBELOFTE_RIJ = /<tr[^>]*>(?:(?!<\/tr>)[\s\S])*?lever(?:tijd|termijn)(?:(?!<\/tr>)[\s\S])*?<\/tr>/gi;
 
 /** HTML-beschrijving → platte alinea's (geen HTML van buitenaf in de pagina). */
 function htmlNaarTekst(html: string): string {
   return html
+    .replace(LEVERBELOFTE_RIJ, "")
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
     .replace(/<li[^>]*>/gi, "• ")
@@ -292,28 +298,28 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   const rang = (i: ProductImage) => FOTO_RANG[i.soort ?? "overig"] + (i.vorm && i.vorm !== eigenVorm ? 0.5 : 0);
   images.sort((a, b) => rang(a) - rang(b));
 
-  // Kleurbolletje uit de kleurfamilie (+ accenten) van elke kleurvariant. Enkel als elke kleur van
-  // het product er een heeft en ze allemaal verschillen; anders blijft de foto het staal (twee
-  // tinten beige zouden anders twee identieke bolletjes geven).
-  const staalBijWaarde = new Map<string, string>();
+  // Staal = de vlakke foto van die kleur, in elke afdeling. Heeft een kleur enkel een sfeer- of rolfoto,
+  // dan een bolletje uit haar kleurfamilie (+ accenten): een kamer van 18 px zegt niets over de kleur.
+  const vlakBijWaarde = new Map<string, string>();
+  for (const img of images) if (img.optionValue && fotoTrede(img) === 0 && !vlakBijWaarde.has(img.optionValue)) vlakBijWaarde.set(img.optionValue, img.src);
+  const bolletjeBijWaarde = new Map<string, string>();
   if (kleurOptie) {
     for (const v of p.variants) {
       const waarde = v.selectedOptions.find((o) => o.name === kleurOptie.name)?.value;
-      if (!waarde || staalBijWaarde.has(waarde)) continue;
+      if (!waarde || bolletjeBijWaarde.has(waarde)) continue;
       const staal = kleurStaal([...lijstUit(v.kleurfamilie), ...lijstUit(v.accentkleuren)]);
-      if (staal) staalBijWaarde.set(waarde, staal);
+      if (staal) bolletjeBijWaarde.set(waarde, staal);
     }
-    const waarden = kleurOptie.optionValues.map((v) => v.name);
-    const uniek = new Set(waarden.map((w) => staalBijWaarde.get(w))).size === waarden.length;
-    if (!waarden.every((w) => staalBijWaarde.has(w)) || !uniek) staalBijWaarde.clear();
   }
+  const fotoStaal = (url: string) => `url("${cdnBreedte(url, 96)}") center / cover`;
 
   const options: ProductOption[] = opties.map((o) => ({
     name: o.name,
     values: o.optionValues.map((v) => {
-      const beeld = v.swatch?.image?.previewImage?.url ?? (o === kleurOptie ? beeldBijWaarde.get(v.name) : undefined);
-      const swatch =
-        v.swatch?.color ?? (o === kleurOptie ? staalBijWaarde.get(v.name) : undefined) ?? (beeld ? `url("${cdnBreedte(beeld, 96)}") center / cover` : undefined);
+      const isKleur = o === kleurOptie;
+      const foto = v.swatch?.image?.previewImage?.url ?? (isKleur ? vlakBijWaarde.get(v.name) : undefined);
+      const reserve = isKleur ? beeldBijWaarde.get(v.name) : undefined;
+      const swatch = foto ? fotoStaal(foto) : (v.swatch?.color ?? (isKleur ? bolletjeBijWaarde.get(v.name) : undefined) ?? (reserve ? fotoStaal(reserve) : undefined));
       return { value: v.name, ...(swatch ? { swatch } : {}) };
     }),
   }));
@@ -343,7 +349,7 @@ function mapProduct(p: RawProduct, collectieNaarCategorie: Map<string, CategoryI
   // Desso is een merk van Tarkett: overal Tarkett, maar zoeken op "Desso" blijft werken.
   const merk = MERK_ONDER[p.vendor] ?? p.vendor;
 
-  const alleSpecs = specsUit(p.specificaties);
+  const alleSpecs = specsUit(p.specificaties).filter((s) => !IS_LEVERBELOFTE.test(s.label.trim()));
   const motief = lijstUit(p.motief);
   const stijl = lijstUit(p.stijl);
   // Behang heeft Motief/Stijl al in de leveranciersspecificaties: niet dubbel tonen.
