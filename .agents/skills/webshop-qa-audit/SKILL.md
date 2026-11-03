@@ -1,6 +1,6 @@
 ---
 name: webshop-qa-audit
-description: QA-audit (alleen lezen) van de Brunic-webshop — filters, productfoto's en hoverbeelden, productkaarten en productnavigatie op desktop en mobiel. Levert een auditrapport met bevestigde fouten, te verifiëren punten en verbeterpunten. Wijzigt niets aan code, data, beelden of Shopify.
+description: QA-audit (alleen lezen) van de Brunic-webshop — filters, productfoto's en hoverbeelden, productkaarten en productnavigatie op desktop en mobiel, plus vindbaarheid, consistentie tussen afdelingen, beloftes en beeldherkomst. Levert een auditrapport met bevestigde fouten, te verifiëren punten en verbeterpunten. Wijzigt niets aan code, data, beelden of Shopify.
 disable-model-invocation: true
 ---
 
@@ -21,16 +21,22 @@ Je bent een ervaren e-commerce QA-specialist. Controleer de webshop op de werkin
 
 **Waartegen je toetst**
 - `docs/filtersysteem.md` is de specificatie van het filtergedrag: OF binnen een filter, EN tussen filters, EN binnen Eigenschappen, aantallen, chips, URL-formaat, geschiedenis, mobiele lade, lege staat, toegankelijkheid. Ook de filtermatrix per afdeling, de bewuste keuzes ("Bewust geen filter") en de bekende beperkingen staan daar.
-- Een afwijking van die specificatie is een fout. Gedrag dat er als **bekende beperking** of **bewuste keuze** staat, is geen nieuwe fout. Label het als "bekend (filtersysteem.md)" en neem het alleen op als het de klant echt hindert. Voorbeeld: kleur en maat gelden per product, niet per variant-combinatie.
+- Een afwijking van die specificatie is een fout. Gedrag dat er als **bekende beperking** of **bewuste keuze** staat, is geen nieuwe fout. Label het als "bekend (filtersysteem.md)" en neem het alleen op als het de klant echt hindert. Voorbeeld: Rolbreedte is een productfilter, geen variantfilter.
 - Prijzen: behang en stoffen staan op aanvraag ("Advies en offerte in de winkel"). Een ontbrekende prijs is daar correct. Vloer en tapijt hebben prijzen met eenheid (per m², per rol, per stuk).
 
+**Regels van de opdrachtgever** (een afwijking is een fout, ook als de code doet wat ze moet doen)
+- Een sfeerfoto komt nooit eerst, tenzij die kleur niets anders heeft. Dat geldt voor kaart en productpagina, met en zonder filter.
+- Geen voorraadtekst en geen levertermijn: er is geen ERP gekoppeld. Levertermijnen staan nog in de Shopify-data, maar horen niet zichtbaar te zijn op de site. Brunic moet ze eerst bevestigen.
+- Desso valt onder Tarkett, en zoeken op "Desso" blijft werken.
+- Een kleurstaal is in elke afdeling de vlakke foto van die kleur. Enkel een kleur zonder vlakke foto krijgt een bolletje.
+
 **Waar de logica zit** (voor de oorzaak, niet om te wijzigen)
-- Kaart: `apps/prototype/src/components/catalog/product-card.tsx`. Het beeld is: gekozen kleurstaal → anders hoverbeeld bij hover → anders `image`. Een klik op een staal wisselt het beeld én de link (`?variant=`).
-- Beeldkeuze: `apps/prototype/src/lib/catalog/view.ts` (`toCard`):
-  - `image` = eerste productfoto;
-  - `hoverImage` = de eerste foto met alt-tekst "– sfeerfoto", anders de tweede foto als die aan geen kleur hangt;
-  - staalbeeld = de eerste foto met `optionValue` gelijk aan die kleur;
-  - `vormen`: in `/catalogus/tapijten/rond` en `speciale-vormen` toont de kaart de foto in die vorm.
+- Kaart: `apps/prototype/src/components/catalog/product-card.tsx`. Het beeld is: gekozen kleurstaal → anders hoverbeeld bij hover → anders `image`. Een klik op een staal wisselt het beeld, de prijs en de link (`?variant=`).
+- Beeldkeuze zonder filter: `apps/prototype/src/lib/catalog/view.ts` (`toCard`) en `product.ts`:
+  - `image` = het eerste beeld op de productpagina van de standaardvariant (`standaardVariant`, `imagesForVariant`);
+  - `hoverImage` = een foto in dezelfde kleur, liefst een sfeerfoto (`hoverVoor`).
+- Toonvariant met filter: `apps/prototype/src/lib/catalog/listing.ts` (`metToonvariant`), zie §Toonvariant in `docs/filtersysteem.md`. Elk staal heeft daar zijn eigen beeld, prijs en link.
+- Soort foto en staal: `apps/prototype/src/lib/catalog/shopify-adapter.ts` (`fotoSoort`, `options`).
 - Galerij en varianten op de productpagina: `apps/prototype/src/components/product/product-view.tsx` en `product-info.tsx`.
 - Filters: `src/lib/catalog/filters.ts` (register `FACETS`), `listing.ts` (server: filteren, tellen, sorteren, pagineren), `facet-normalisatie.ts`, `src/data/filterprofielen.ts`, UI in `src/components/catalog/product-listing.tsx`.
 
@@ -53,7 +59,7 @@ Je mag de website bezoeken, filters bedienen, productvarianten selecteren, tusse
 
 **Enige plekken waar je schrijft:**
 - Je hulpscripts en ruwe uitvoer gaan naar je scratchpad-map of naar `$env:TEMP\brunic-qa\`, nooit in de repo.
-- Het rapport en de screenshots gaan naar `docs/audits/<JJJJ-MM-DD>-webshop-qa/`: het rapport als `rapport.md`, de screenshots in `screenshots/`. Die map is gitignored.
+- Het rapport en de screenshots gaan naar `docs/audits/<JJJJ-MM-DD>-webshop-qa/`: het rapport als `rapport.md`, de screenshots in `screenshots/`. Enkel `screenshots/` is gitignored.
 
 Ook bij een overduidelijke fout blijft je taak: vaststellen, documenteren en een oplossing voorstellen.
 
@@ -118,7 +124,41 @@ Beoordeel:
 - Overlappende elementen, horizontale overflow en onbereikbare knoppen.
 - Toetsenbordbediening en zichtbare focus.
 
-## 5. Test daadwerkelijk in de browser
+## 5. Controleer ook wat er niet staat
+
+Een test op wat de site toont, ziet niet wat ontbreekt. Reken deze punten altijd na op de hele momentopname en zet de tabellen in het rapport, ook als er geen fout uit volgt.
+
+**Vindbaarheid**
+- Maak per type en merk een tabel: aantal kleuren, hoeveel zonder kleurfamilie, hoeveel met enkel een code als naam (zoals 901D).
+- Een kleur die enkel een code heet en geen kleurfamilie heeft, kan een klant niet vinden. Dat is een bevinding, ook al werkt de filter.
+- Verdwijnt een filter uit het profiel omdat de data ontbreekt, dan is dat geen geslaagde test maar een bevinding. Voorbeeld: vinyl had op 02/11/2026 geen filter Kleur. "Geen lege filtergroep" klopte, maar de klant kon niet op kleur zoeken.
+- Neem ook de dekking van Maat, Vorm, Motief en Stijl mee. `test:filters` drukt ze af.
+
+**Consistentie tussen afdelingen**
+- Zet de vier afdelingen naast elkaar: soort staal (foto of bolletje), aandeel kleuren met een eigen vlakke foto, aandeel kaarten met een hoverbeeld, regels op de kaart en kenmerken op de productpagina.
+- Een verschil zonder reden in `docs/filtersysteem.md` is een bevinding.
+
+**Beloftes**
+- Zoek niet op vaste woorden. Maak eerst een lijst van alle labels in het veld `specificaties`, met hun aantal, en lees die hele lijst. Op 02/11/2026 telde een zoekopdracht op "Levertijd" 31 producten, terwijl er 276 waren: bij de meeste heet het veld "Levertermijn".
+- Zoek daarna in de beschrijvingen op levertijd, levertermijn, leverbaar, werkdagen, voorraad, garantie en gratis levering.
+- Toets wat de klant echt ziet op de site, want de site verbergt een deel van de data.
+- Staat een belofte op de site en is ze niet bevestigd door Brunic, zoals een garantietermijn, dan label je ze "te verifiëren", met het aantal producten.
+
+**Beeldlabels en herkomst**
+- Tel per merk de foto's zonder label (soort `overig`). De code kan die niet rangschikken, dus een kamerfoto kan vooraan staan. Bekijk zelf elke kaart die met zo'n foto begint.
+- Zoek in de bestandsnamen naar sporen van herkomst: `_AC_SX…` of `_AC_SY…` (Amazon), `…_n.jpg` met lange cijferreeksen (Facebook of Instagram), stockbureaus, Pinterest, WhatsApp, screenshots.
+- Label die "te verifiëren (beeldrechten)", met product en bestand. Rechten kun je niet zelf vaststellen, en een vreemde bestandsnaam alleen bewijst geen fout.
+
+**Namen**
+- Zoek afgekapte of verminkte productnamen: weggevallen letters zoals "Olivtr d", ontbrekende speciale tekens, namen in kleine letters. Vergelijk titel, slug en alt-tekst.
+- Controleer hernoemde producten ook op de oude URL.
+
+**Versheid**
+- Vermeld hoe oud de momentopname is (`/api/status`) tegenover het moment van de audit. Wijzigingen in Shopify komen pas na een nieuwe build op de site.
+- Of die build automatisch start (webhooks), kun je zelf niet zien, want `packages/catalog` is verboden terrein. Vermeld het als "te verifiëren door iemand met toegang tot Shopify".
+- `/api/producten?slugs=…&live=1` geeft de beschikbaarheid live. Wijkt die in een steekproef af van de momentopname, meld dat dan.
+
+## 6. Test daadwerkelijk in de browser
 
 Test alle hoofdcategorieën, iedere filtergroep en representatieve combinaties. Neem producten met één afbeelding, meerdere afbeeldingen, kleurvarianten en ontbrekende beelden mee. Zoek die producten vooraf op in de momentopname, zodat je steekproef bewust gekozen is.
 
@@ -135,7 +175,7 @@ Controleer waar mogelijk de volledige catalogus op ontbrekende beeldverwijzingen
 
 Als toegang ontbreekt, rapporteer dan wat je niet kon controleren. Claim geen succesvolle test zonder die uitgevoerd te hebben.
 
-## 6. Lever een concreet auditrapport op
+## 7. Lever een concreet auditrapport op
 
 Schrijf het rapport in het Nederlands (nl-BE) naar `docs/audits/<JJJJ-MM-DD>-webshop-qa/rapport.md`, met bovenaan de datum, de geteste omgeving en de commit.
 
@@ -154,6 +194,8 @@ Onderscheid:
 Prioriteit: **P1** = blokkeert kopen/vinden of toont foute informatie · **P2** = duidelijk storend · **P3** = afwerking. Verwijs bij een oorzaak in code naar `bestand:regel`. Gaat het om data, noem dan het product en het veld in Shopify.
 
 Geef fotoproblemen een apart overzicht zodat ik per product kan beoordelen wat eventueel aangepast moet worden. Per regel: product (titel + slug), variant/kleur, pagina-URL, standaardbeeld-URL, hoverbeeld-URL, screenshot, oordeel (fout / te verifiëren) en voorstel.
+
+Neem de tabellen uit §5 op in een eigen hoofdstuk.
 
 Sluit af met de geteste onderdelen, eventuele beperkingen en een prioriteitenlijst voor later herstel.
 

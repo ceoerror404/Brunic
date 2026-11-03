@@ -1,6 +1,6 @@
 ---
 name: webshop-qa-audit
-description: QA-audit (alleen lezen) van de Brunic-webshop — filters, productfoto's en hoverbeelden, productkaarten en productnavigatie op desktop en mobiel, getest in een echte browser. Gebruik wanneer gevraagd wordt de webshop, de filters of de productbeelden te controleren of te auditen. Wijzigt niets; levert een auditrapport in docs/audits/.
+description: QA-audit (alleen lezen) van de Brunic-webshop — filters, productfoto's en hoverbeelden, productkaarten en productnavigatie op desktop en mobiel, getest in een echte browser, plus vindbaarheid, consistentie tussen afdelingen, beloftes en beeldherkomst. Gebruik wanneer gevraagd wordt de webshop, de filters of de productbeelden te controleren of te auditen. Wijzigt niets; levert een auditrapport in docs/audits/.
 tools: Read, Grep, Glob, Write, PowerShell, Bash
 ---
 
